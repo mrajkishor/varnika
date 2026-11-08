@@ -4,10 +4,27 @@ A private, good-looking **WireGuard VPN client for Android**, built with Flutter
 
 Varnika has no accounts, no servers of its own, and no tracking. You bring a WireGuard config from your own server or a provider; Varnika keeps it encrypted on the phone and connects using the official WireGuard engine.
 
+### ▶ [See how Varnika works: the interactive guide](https://htmlpreview.github.io/?https://github.com/mrajkishor/varnika/blob/main/docs/index.html)
+
+An interactive, visual walkthrough of the complete flow ([`docs/index.html`](docs/index.html)):
+
+- **Live tunnel simulator:** flip the VPN on and watch readable traffic turn into scrambled data, and see what the Wi‑Fi owner and websites can see.
+- **Two halves and the handshake:** why your phone and the server must know each other's keys.
+- **The complete flow in 9 steps:** a phone mockup for each screen, plus what the app does underneath (Flutter → Kotlin → WireGuard).
+- **`.conf` explorer:** tap any line to learn what it does, and try `AllowedIPs` values to see where traffic goes.
+- **Where configs come from:** VPN providers, server tools, by hand, and Create from scratch.
+- **Split tunneling playground:** tick apps and see which go through the tunnel and which go direct.
+- **Kill switch simulator:** drop the tunnel on a train ride and see what leaks, with and without the kill switch.
+- **Use cases and case studies:** a student on public Wi‑Fi, a self-hoster with a home NAS, a design studio team, and a researcher abroad.
+- **Inside the app:** an animated architecture diagram that traces one tap on Connect through every layer.
+
+> Prefer a cleaner URL? Turn on GitHub Pages (**Settings → Pages → Deploy from a branch → `main` / `/docs`**) and the guide will also be available at `https://mrajkishor.github.io/varnika/`.
+
 ---
 
 ## Contents
 
+0. [Interactive guide (visual walkthrough)](https://htmlpreview.github.io/?https://github.com/mrajkishor/varnika/blob/main/docs/index.html)
 1. [What is this app for?](#1-what-is-this-app-for)
 2. [Explain it like I'm six](#2-explain-it-like-im-six)
 3. [How a VPN works (and where Varnika fits)](#3-how-a-vpn-works-and-where-varnika-fits)

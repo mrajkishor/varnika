@@ -1,0 +1,1169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Varnika · How it works</title>
+<meta name="description" content="An interactive guide to Varnika, a WireGuard VPN client for Android: the complete flow, configs, split tunneling, kill switch, use cases and case studies.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&family=Tiro+Devanagari+Hindi&display=swap" rel="stylesheet">
+<style>
+:root {
+  --ink: #1E1B4B;
+  --ink-2: #2B2768;
+  --marigold: #E8833A;
+  --teal: #14B8A6;
+  --rose: #E11D48;
+  --violet: #7C6CF0;
+  --bg: #F3F2FA;
+  --surface: #FFFFFF;
+  --text: #1E1B4B;
+  --muted: #5B5880;
+  --line: #DCD9EE;
+  --code-bg: #1E1B4B;
+  --radius-lg: 22px;
+  --radius-md: 14px;
+  --radius-sm: 8px;
+  --display: "Bricolage Grotesque", system-ui, sans-serif;
+  --body: "Instrument Sans", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, monospace;
+  --deva: "Tiro Devanagari Hindi", "Noto Sans Devanagari", serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #12102A;
+    --surface: #1B1838;
+    --text: #ECEAFB;
+    --muted: #A9A5CC;
+    --line: #2F2B57;
+    --code-bg: #0C0A1F;
+  }
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 400 17px/1.6 var(--body);
+  -webkit-font-smoothing: antialiased;
+}
+a { color: inherit; }
+:focus-visible { outline: 3px solid var(--marigold); outline-offset: 3px; border-radius: 6px; }
+button { font: inherit; color: inherit; cursor: pointer; }
+h1, h2, h3 { font-family: var(--display); line-height: 1.1; margin: 0; letter-spacing: -0.02em; }
+h2 { font-size: clamp(30px, 4.4vw, 46px); font-weight: 800; max-width: 18ch; }
+h3 { font-size: 21px; font-weight: 700; }
+p { margin: 0; }
+.wrap { max-width: 1120px; margin: 0 auto; padding: 0 20px; }
+.lede { color: var(--muted); max-width: 62ch; margin-top: 14px; font-size: 18px; }
+section.block { padding: 96px 0 40px; }
+.block-head { display: grid; gap: 4px; margin-bottom: 36px; }
+.step-no {
+  font-family: var(--display); font-weight: 800; color: var(--marigold);
+  font-size: 15px; letter-spacing: 0.02em;
+}
+
+/* ───────────────────────── top nav ───────────────────────── */
+.nav {
+  position: sticky; top: 0; z-index: 20;
+  background: color-mix(in srgb, var(--ink) 92%, transparent);
+  backdrop-filter: blur(10px);
+  color: #fff;
+}
+.nav .wrap { display: flex; align-items: center; gap: 22px; height: 58px; overflow-x: auto; scrollbar-width: none; }
+.nav .wrap::-webkit-scrollbar { display: none; }
+.brand { display: flex; align-items: baseline; gap: 8px; text-decoration: none; flex: none; }
+.brand b { font-family: var(--display); font-weight: 800; font-size: 20px; }
+.brand span { font-family: var(--deva); color: var(--marigold); font-size: 18px; }
+.nav a.link { text-decoration: none; font-size: 14px; opacity: .8; white-space: nowrap; }
+.nav a.link:hover { opacity: 1; }
+
+/* ───────────────────────── hero / tunnel ───────────────────────── */
+.hero { background: var(--ink); color: #fff; padding: 64px 0 72px; overflow: hidden; position: relative; }
+.hero-grid { display: grid; gap: 28px; }
+.hero h1 { font-size: clamp(40px, 7vw, 84px); font-weight: 800; max-width: 14ch; }
+.hero h1 .deva { font-family: var(--deva); font-weight: 400; color: var(--marigold); display: block; font-size: .62em; letter-spacing: 0; margin-top: 6px; }
+.hero .lede { color: #C9C5F2; }
+
+.sim {
+  margin-top: 18px;
+  background: var(--ink-2);
+  border-radius: var(--radius-lg);
+  padding: 22px;
+  border: 1px solid #3B3685;
+}
+.sim-top { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+.switch {
+  display: inline-flex; align-items: center; gap: 12px;
+  background: none; border: 0; padding: 0; color: #fff; font-weight: 600;
+}
+.switch .track-ui {
+  width: 64px; height: 36px; border-radius: 99px; background: #4A4590; position: relative; transition: background .3s;
+}
+.switch .track-ui::after {
+  content: ""; position: absolute; top: 4px; left: 4px; width: 28px; height: 28px; border-radius: 50%;
+  background: #fff; transition: transform .3s cubic-bezier(.2,.8,.2,1);
+}
+.switch[aria-checked="true"] .track-ui { background: var(--teal); }
+.switch[aria-checked="true"] .track-ui::after { transform: translateX(28px); }
+.sim-status { font-size: 15px; color: #C9C5F2; }
+.sim-status strong { color: #fff; }
+
+.lane { position: relative; height: 200px; --mid: 66%; }
+.node {
+  position: absolute; top: var(--mid); transform: translate(-50%, -50%);
+  display: grid; justify-items: center; gap: 6px; z-index: 3; text-align: center; width: 92px;
+}
+.node .ico {
+  width: 58px; height: 58px; border-radius: 16px; display: grid; place-items: center;
+  background: #fff; color: var(--ink); font-size: 26px; box-shadow: 0 8px 24px rgba(0,0,0,.25);
+}
+.node small { font-size: 12px; color: #C9C5F2; line-height: 1.25; }
+.node.server { transition: opacity .4s, transform .4s; }
+.node.server.off { opacity: .18; transform: translate(-50%, -50%) scale(.85); }
+.node.server .ico { background: var(--teal); color: #fff; }
+.tube {
+  position: absolute; top: var(--mid); height: 34px; transform: translateY(-50%);
+  left: 7%; width: 66%; border-radius: 99px;
+  background: linear-gradient(90deg, rgba(20,184,166,.28), rgba(20,184,166,.12));
+  border: 2px solid rgba(20,184,166,.7);
+  opacity: 0; transition: opacity .4s; z-index: 1;
+}
+.sim.on .tube { opacity: 1; }
+.wire { position: absolute; top: var(--mid); left: 7%; right: 7%; height: 2px; background: #4A4590; z-index: 0; }
+.packet {
+  position: absolute; top: var(--mid); transform: translate(-50%, -50%);
+  font: 600 12px/1 var(--mono); padding: 5px 8px; border-radius: 6px; white-space: nowrap; z-index: 2;
+  background: #fff; color: var(--ink);
+}
+.packet.enc { background: var(--teal); color: #fff; }
+.watcher {
+  position: absolute; left: 42%; top: 0; transform: translateX(-50%);
+  z-index: 3; text-align: center; width: 190px;
+}
+.watcher .eye { font-size: 22px; }
+.watcher .sees {
+  margin-top: 4px; font: 500 12px/1.3 var(--mono); color: #fff;
+  background: rgba(0,0,0,.25); border-radius: 8px; padding: 6px 8px; min-height: 2.6em;
+}
+.dest-card {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-top: 18px;
+}
+.dest-card > div { background: rgba(0,0,0,.2); border-radius: var(--radius-md); padding: 12px 14px; font-size: 14px; color: #C9C5F2; }
+.dest-card strong { display: block; color: #fff; font: 600 15px/1.4 var(--mono); }
+
+/* ───────────────────────── shared surfaces ───────────────────────── */
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 24px; }
+.seg { display: inline-flex; background: var(--surface); border: 1px solid var(--line); border-radius: 99px; padding: 4px; gap: 2px; flex-wrap: wrap; }
+.seg button { border: 0; background: none; padding: 8px 16px; border-radius: 99px; font-weight: 600; font-size: 14px; color: var(--muted); }
+.seg button[aria-pressed="true"], .seg button[aria-selected="true"] { background: var(--ink); color: #fff; }
+@media (prefers-color-scheme: dark) {
+  .seg button[aria-pressed="true"], .seg button[aria-selected="true"] { background: var(--marigold); color: #1B1838; }
+}
+.btn {
+  border: 0; border-radius: 12px; padding: 12px 18px; font-weight: 600;
+  background: var(--ink); color: #fff;
+}
+.btn.ghost { background: transparent; border: 1.5px solid var(--line); color: var(--text); }
+.btn.go { background: var(--marigold); color: #fff; }
+@media (prefers-color-scheme: dark) { .btn { background: #3B3685; } .btn.go { background: var(--marigold); } }
+
+/* ───────────────────────── handshake ───────────────────────── */
+.halves { display: grid; grid-template-columns: 1fr auto 1fr; gap: 18px; align-items: stretch; }
+.half h3 { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.half ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.half li { display: flex; gap: 10px; align-items: flex-start; font-size: 15px; }
+.key { font: 600 12px/1 var(--mono); padding: 5px 7px; border-radius: 6px; flex: none; margin-top: 2px; }
+.key.priv { background: #FDE7E7; color: #9F1239; }
+.key.pub { background: #DDF7F3; color: #0F766E; }
+.key.addr { background: #ECE9FF; color: #4338CA; }
+.half li.missing { opacity: .4; text-decoration: line-through; }
+.bridge { display: grid; align-content: center; justify-items: center; gap: 10px; min-width: 150px; text-align: center; }
+.bridge .result { font-weight: 700; font-family: var(--display); font-size: 20px; min-height: 2.4em; }
+.bridge .result.ok { color: var(--teal); }
+.bridge .result.bad { color: var(--rose); }
+.check { display: flex; gap: 10px; align-items: center; font-size: 14px; margin-top: 14px; color: var(--muted); }
+.check input { width: 18px; height: 18px; accent-color: var(--marigold); }
+
+/* ───────────────────────── flow stepper ───────────────────────── */
+.flow { display: grid; grid-template-columns: 300px 1fr; gap: 36px; align-items: start; }
+.flow > div, .anat > *, .src-body > *, .split > *, .ks > *, .case > * { min-width: 0; }
+.phone {
+  width: 280px; height: 560px; border-radius: 40px; background: #0E0D1A; padding: 12px; margin: 0 auto;
+  box-shadow: 0 30px 60px rgba(30,27,75,.35); position: sticky; top: 80px;
+}
+.screen {
+  width: 100%; height: 100%; border-radius: 30px; overflow: hidden; background: #FBFAFF; color: #1E1B4B;
+  position: relative; font-size: 13px; display: flex; flex-direction: column;
+}
+.sbar { display: flex; justify-content: space-between; padding: 10px 18px 4px; font: 600 11px/1 var(--body); }
+.app-head { padding: 8px 16px 6px; display: flex; align-items: baseline; gap: 6px; }
+.app-head b { font: 800 17px/1 var(--display); }
+.app-head span { font-family: var(--deva); color: var(--marigold); font-size: 14px; }
+.scr-body { flex: 1; padding: 6px 14px; display: flex; flex-direction: column; gap: 10px; }
+.orb-wrap { display: grid; place-items: center; padding: 8px 0; }
+.orb {
+  width: 132px; height: 132px; border-radius: 50%; display: grid; place-items: center; text-align: center;
+  border: 3px solid var(--marigold); background: #fff; font-weight: 700; color: #1E1B4B; position: relative;
+}
+.orb .glyph { font-size: 34px; line-height: 1; }
+.orb.up { background: var(--teal); border-color: var(--teal); color: #fff; box-shadow: 0 0 0 10px rgba(20,184,166,.18), 0 0 0 22px rgba(20,184,166,.08); }
+.orb.busy::after {
+  content: ""; position: absolute; inset: -10px; border-radius: 50%;
+  border: 4px solid transparent; border-top-color: var(--marigold); animation: spin 1s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .orb.busy::after { animation: none; } }
+.mini-card { background: #fff; border: 1px solid #E4E1F3; border-radius: 14px; padding: 10px 12px; }
+.mini-card .t { font-size: 11px; color: #6B6890; }
+.mini-row { display: flex; justify-content: space-between; gap: 8px; }
+.mini-row b { font-size: 13px; }
+.headline { text-align: center; font: 700 16px/1.2 var(--display); }
+.headline small { display: block; font: 400 11px/1.4 var(--body); color: #6B6890; margin-top: 3px; }
+.dialog-scrim { position: absolute; inset: 0; background: rgba(14,13,26,.55); display: grid; place-items: center; padding: 18px; }
+.dialog { background: #fff; border-radius: 18px; padding: 16px; font-size: 13px; }
+.dialog .acts { display: flex; justify-content: flex-end; gap: 14px; margin-top: 12px; font-weight: 700; color: #4338CA; }
+.camera { flex: 1; background: #111; border-radius: 16px; display: grid; place-items: center; position: relative; }
+.camera .frame { width: 150px; height: 150px; border: 3px solid var(--marigold); border-radius: 20px; display: grid; place-items: center; }
+.qr { width: 110px; height: 110px; background:
+  conic-gradient(from 90deg at 30% 30%, #fff 25%, transparent 0) 0 0/22px 22px,
+  repeating-linear-gradient(45deg, #fff 0 4px, #111 4px 9px); opacity: .9; border-radius: 4px; }
+.code-mini { font: 400 10px/1.5 var(--mono); background: #F1EFFA; border-radius: 12px; padding: 10px; white-space: pre; overflow: hidden; }
+.notif { background: #fff; border-radius: 14px; padding: 10px 12px; box-shadow: 0 6px 20px rgba(0,0,0,.18); }
+.notif .act { color: #4338CA; font-weight: 700; font-size: 12px; margin-top: 6px; }
+.bars { display: flex; align-items: flex-end; gap: 6px; height: 70px; }
+.bars i { flex: 1; background: var(--teal); border-radius: 4px 4px 0 0; }
+.bars i:nth-child(odd) { background: var(--violet); }
+
+.steps-list { display: grid; gap: 4px; margin-bottom: 22px; }
+.steps-list button {
+  text-align: left; border: 0; background: none; padding: 10px 12px; border-radius: 12px;
+  display: grid; grid-template-columns: 34px 1fr; gap: 10px; align-items: baseline; color: var(--muted);
+}
+.steps-list button .n { font: 800 15px/1 var(--display); color: var(--line); }
+.steps-list button[aria-current="step"] { background: var(--surface); color: var(--text); box-shadow: 0 0 0 1px var(--line); }
+.steps-list button[aria-current="step"] .n { color: var(--marigold); }
+.steps-list button.done .n { color: var(--teal); }
+.step-detail h3 { font-size: 26px; margin-bottom: 10px; }
+.step-detail p { color: var(--muted); max-width: 60ch; }
+.hood { margin-top: 18px; background: var(--code-bg); color: #E4E1FF; border-radius: var(--radius-md); padding: 16px 18px; font: 400 13px/1.7 var(--mono); overflow-x: auto; }
+.hood .c { color: #8F8BC0; }
+.hood .k { color: #F4B07A; }
+.hood .s { color: #5EEAD4; }
+.who { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.who span { font-size: 13px; border: 1px solid var(--line); border-radius: 99px; padding: 4px 10px; color: var(--muted); }
+.stepper-ctl { display: flex; gap: 10px; margin-top: 22px; flex-wrap: wrap; }
+
+/* ───────────────────────── conf anatomy ───────────────────────── */
+.anat { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr); gap: 22px; align-items: start; }
+.conf { background: var(--code-bg); color: #E4E1FF; border-radius: var(--radius-lg); padding: 18px 8px; font: 400 14px/1.9 var(--mono); overflow-x: auto; }
+.conf button {
+  display: block; width: 100%; text-align: left; background: none; border: 0; padding: 0 12px; border-radius: 6px;
+  font: inherit; color: inherit; white-space: pre;
+}
+.conf button:hover, .conf button[aria-pressed="true"] { background: rgba(232,131,58,.22); }
+.conf .sec { color: #F4B07A; font-weight: 600; }
+.conf .cm { color: #8F8BC0; }
+.conf .kv b { color: #5EEAD4; font-weight: 600; }
+.explain { position: sticky; top: 80px; }
+.explain .tag { display: inline-block; font: 600 12px/1 var(--mono); padding: 6px 8px; border-radius: 6px; background: #ECE9FF; color: #4338CA; margin-bottom: 10px; }
+.explain .req { font-size: 13px; color: var(--muted); margin-top: 12px; }
+.explain .analogy { margin-top: 12px; padding: 12px 14px; border-left: 3px solid var(--marigold); background: color-mix(in srgb, var(--marigold) 8%, transparent); border-radius: 0 10px 10px 0; font-size: 15px; }
+
+.routes { margin-top: 26px; }
+.route-grid { display: grid; gap: 10px; margin-top: 18px; }
+.route { display: grid; grid-template-columns: minmax(150px, 220px) 1fr auto; gap: 14px; align-items: center; padding: 12px 16px; border-radius: var(--radius-md); background: var(--surface); border: 1px solid var(--line); }
+.route .dst { font: 600 14px/1.3 var(--mono); }
+.route .dst small { display: block; font: 400 12px/1.4 var(--body); color: var(--muted); }
+.route .path { height: 10px; border-radius: 99px; background: var(--line); position: relative; overflow: hidden; }
+.route .path::after { content: ""; position: absolute; inset: 0; width: 0; background: var(--teal); transition: width .5s; }
+.route.vpn .path::after { width: 100%; }
+.route .verdict { font-weight: 700; font-size: 13px; min-width: 92px; text-align: right; }
+.route.vpn .verdict { color: var(--teal); }
+.route:not(.vpn) .verdict { color: var(--muted); }
+
+/* ───────────────────────── sources ───────────────────────── */
+.src-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 22px; margin-top: 22px; align-items: start; }
+.chain { display: grid; gap: 0; counter-reset: c; }
+.chain li { list-style: none; position: relative; padding: 0 0 18px 40px; }
+.chain li::before {
+  counter-increment: c; content: counter(c); position: absolute; left: 0; top: 0;
+  width: 26px; height: 26px; border-radius: 50%; background: var(--ink); color: #fff; font: 700 13px/26px var(--display); text-align: center;
+}
+.chain li::after { content: ""; position: absolute; left: 12px; top: 28px; bottom: 2px; width: 2px; background: var(--line); }
+.chain li:last-child::after { display: none; }
+.chain { padding: 0; margin: 0; }
+.pill-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.pill-row span { font-size: 13px; padding: 4px 10px; border-radius: 99px; background: color-mix(in srgb, var(--teal) 14%, transparent); color: var(--text); }
+pre.snip { background: var(--code-bg); color: #E4E1FF; border-radius: var(--radius-md); padding: 14px 16px; font: 400 13px/1.7 var(--mono); overflow-x: auto; margin: 0; }
+
+/* ───────────────────────── split tunnel ───────────────────────── */
+.split { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 22px; align-items: start; margin-top: 22px; }
+.apps { display: grid; gap: 6px; }
+.app-row { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border-radius: 12px; border: 1px solid transparent; background: none; width: 100%; text-align: left; }
+.app-row:hover { border-color: var(--line); }
+.app-row .ai { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; font-size: 18px; background: color-mix(in srgb, var(--ink) 8%, transparent); flex: none; }
+.app-row .nm { flex: 1; font-weight: 600; font-size: 15px; }
+.app-row .nm small { display: block; font: 400 12px/1.3 var(--mono); color: var(--muted); }
+.app-row .box { width: 22px; height: 22px; border-radius: 6px; border: 2px solid var(--line); display: grid; place-items: center; font-size: 14px; color: #fff; flex: none; }
+.app-row .box { color: transparent; }
+.app-row[aria-checked="true"] .box { background: var(--marigold); border-color: var(--marigold); color: #fff; }
+.apps.disabled .app-row { opacity: .45; pointer-events: none; }
+.lanes { display: grid; gap: 14px; }
+.lane2 { border-radius: var(--radius-md); padding: 14px 16px; min-height: 110px; border: 2px dashed var(--line); }
+.lane2.t { border-color: var(--teal); background: color-mix(in srgb, var(--teal) 7%, transparent); }
+.lane2 h4 { margin: 0 0 4px; font: 700 16px/1.2 var(--display); }
+.lane2 p { font-size: 13px; color: var(--muted); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.chips span { padding: 6px 10px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); font-size: 14px; animation: pop .25s ease-out; }
+@keyframes pop { from { transform: scale(.85); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .chips span { animation: none; } }
+.split-note { margin-top: 14px; font-size: 14px; color: var(--muted); }
+
+/* ───────────────────────── kill switch ───────────────────────── */
+.ks { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: 22px; margin-top: 22px; align-items: start; }
+.ks-ctl { display: grid; gap: 14px; }
+.toggle-row { display: flex; justify-content: space-between; align-items: center; gap: 14px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.toggle-row:last-of-type { border-bottom: 0; }
+.toggle-row small { display: block; color: var(--muted); font-size: 13px; }
+.tsw { width: 48px; height: 28px; border-radius: 99px; background: var(--line); border: 0; position: relative; flex: none; transition: background .25s; }
+.tsw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; transition: transform .25s; box-shadow: 0 1px 3px rgba(0,0,0,.2); }
+.tsw[aria-checked="true"] { background: var(--teal); }
+.tsw[aria-checked="true"]::after { transform: translateX(20px); }
+.timeline { display: grid; grid-template-columns: repeat(12, 1fr); gap: 4px; margin-top: 14px; }
+.timeline i { height: 48px; border-radius: 6px; background: var(--line); transition: background .2s; }
+.timeline i.safe { background: var(--teal); }
+.timeline i.leak { background: var(--rose); }
+.timeline i.block { background: repeating-linear-gradient(45deg, #9B97C4 0 6px, #B9B6DB 6px 12px); }
+.tl-legend { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 10px; font-size: 13px; color: var(--muted); }
+.tl-legend b { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -1px; margin-right: 6px; }
+.ks-result { margin-top: 16px; font-size: 16px; min-height: 3.2em; }
+.ks-result strong { font-family: var(--display); }
+
+/* ───────────────────────── use cases ───────────────────────── */
+.uc-table { width: 100%; border-collapse: collapse; }
+.uc-table th, .uc-table td { text-align: left; vertical-align: top; padding: 16px 14px; border-bottom: 1px solid var(--line); }
+.uc-table th { font: 600 13px/1.2 var(--body); color: var(--muted); }
+.uc-table td:first-child { font-weight: 700; font-family: var(--display); font-size: 18px; width: 24%; }
+.uc-table td:first-child span { display: block; font-size: 26px; margin-bottom: 4px; }
+.uc-table td { font-size: 15px; }
+.uc-table code { font: 600 12.5px/1.4 var(--mono); background: color-mix(in srgb, var(--ink) 8%, transparent); padding: 2px 6px; border-radius: 5px; }
+
+/* ───────────────────────── case studies ───────────────────────── */
+.cases-tabs { display: flex; gap: 10px; flex-wrap: wrap; }
+.case-tab { border: 1.5px solid var(--line); background: var(--surface); border-radius: 16px; padding: 10px 14px; display: flex; gap: 10px; align-items: center; text-align: left; }
+.case-tab .av { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; font-size: 18px; background: color-mix(in srgb, var(--marigold) 18%, transparent); }
+.case-tab b { display: block; font-size: 15px; }
+.case-tab small { color: var(--muted); font-size: 12px; }
+.case-tab[aria-selected="true"] { border-color: var(--marigold); box-shadow: 0 0 0 3px color-mix(in srgb, var(--marigold) 22%, transparent); }
+.case { margin-top: 22px; display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 22px; align-items: start; }
+.case h3 { font-size: 30px; margin-bottom: 8px; }
+.case .meta { color: var(--muted); font-size: 15px; }
+.story { margin-top: 22px; display: grid; gap: 18px; }
+.story h4 { margin: 0 0 4px; font: 700 15px/1.2 var(--display); color: var(--marigold); }
+.story p { color: var(--text); max-width: 64ch; }
+.facts { display: grid; gap: 10px; }
+.fact { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); padding: 14px 16px; }
+.fact .v { font: 800 28px/1.1 var(--display); color: var(--teal); }
+.fact .l { font-size: 13px; color: var(--muted); }
+.illustrative { font-size: 13px; color: var(--muted); margin-top: 18px; }
+
+/* ───────────────────────── architecture ───────────────────────── */
+.arch svg { width: 100%; height: auto; display: block; }
+.arch .box rect { fill: var(--surface); stroke: var(--line); stroke-width: 1.5; }
+.arch .box text { fill: var(--text); font: 600 14px var(--body); }
+.arch .box text.sub { fill: var(--muted); font: 400 11.5px var(--mono); }
+.arch .box.lit rect { stroke: var(--marigold); stroke-width: 3; }
+.arch .edge { stroke: var(--line); stroke-width: 2.5; fill: none; marker-end: url(#arrow); }
+.arch .edge.lit { stroke: var(--marigold); stroke-dasharray: 8 6; animation: dash .8s linear infinite; }
+@keyframes dash { to { stroke-dashoffset: -28; } }
+@media (prefers-reduced-motion: reduce) { .arch .edge.lit { animation: none; } }
+.arch .layer { fill: none; stroke: var(--line); stroke-dasharray: 4 6; }
+.arch .layer-t { fill: var(--muted); font: 600 12px var(--body); }
+.trace-cap { margin-top: 16px; min-height: 3.4em; font-size: 16px; }
+.trace-cap code { font: 600 13px var(--mono); background: color-mix(in srgb, var(--ink) 8%, transparent); padding: 2px 6px; border-radius: 5px; }
+
+footer { margin-top: 80px; padding: 48px 0 64px; background: var(--ink); color: #C9C5F2; }
+footer a { color: #fff; }
+footer .wrap { display: grid; gap: 10px; }
+
+/* ───────────────────────── responsive ───────────────────────── */
+@media (max-width: 900px) {
+  .flow, .anat, .src-body, .split, .ks, .case { grid-template-columns: 1fr; }
+  .phone { position: static; }
+  .explain { position: static; }
+  .halves { grid-template-columns: 1fr; }
+  .bridge { padding: 8px 0; }
+  .route { grid-template-columns: 1fr auto; }
+  .route .path { grid-column: 1 / -1; order: 3; }
+  .uc-table thead { display: none; }
+  .uc-table tr { display: block; border-bottom: 1px solid var(--line); padding: 10px 0; }
+  .uc-table td { display: block; border: 0; padding: 4px 0; width: auto !important; }
+  .uc-table td[data-h]::before { content: attr(data-h); display: block; font-size: 12px; color: var(--muted); font-weight: 600; }
+}
+@media (max-width: 560px) {
+  body { font-size: 16px; }
+  section.block { padding-top: 72px; }
+  .lane { height: 210px; --mid: 70%; }
+  .node { width: 70px; }
+  .node .ico { width: 46px; height: 46px; font-size: 21px; border-radius: 13px; }
+  .node small { font-size: 10.5px; }
+  .watcher { width: 150px; }
+  .packet { font-size: 10px; padding: 4px 6px; }
+  .phone { width: 260px; height: 520px; }
+  .panel { padding: 18px; }
+}
+</style>
+</head>
+<body>
+
+<nav class="nav" aria-label="Sections">
+  <div class="wrap">
+    <a class="brand" href="#top"><b>Varnika</b><span>वर्णिक</span></a>
+    <a class="link" href="#halves">Two halves</a>
+    <a class="link" href="#flow">Complete flow</a>
+    <a class="link" href="#config">The .conf file</a>
+    <a class="link" href="#sources">Getting a config</a>
+    <a class="link" href="#split">Split tunneling</a>
+    <a class="link" href="#killswitch">Kill switch</a>
+    <a class="link" href="#usecases">Use cases</a>
+    <a class="link" href="#cases">Case studies</a>
+    <a class="link" href="#inside">Inside the app</a>
+  </div>
+</nav>
+
+<!-- ═════════════════════════ HERO ═════════════════════════ -->
+<header class="hero" id="top">
+  <div class="wrap hero-grid">
+    <h1>Your letters, sealed in a tunnel.<span class="deva">वर्णिक</span></h1>
+    <p class="lede">Varnika is a WireGuard VPN app for Android. Everything your phone sends is made of letters: website names, messages, payments. Flip the switch and watch who can read them.</p>
+
+    <div class="sim" id="sim" aria-label="VPN simulator">
+      <div class="sim-top">
+        <button class="switch" id="vpnSwitch" role="switch" aria-checked="false">
+          <span class="track-ui" aria-hidden="true"></span>
+          <span id="switchLabel">VPN off</span>
+        </button>
+        <p class="sim-status" id="simStatus" aria-live="polite"><strong>Not protected.</strong> The café Wi‑Fi can read where you go.</p>
+      </div>
+
+      <div class="lane" aria-hidden="true">
+        <div class="wire"></div>
+        <div class="tube"></div>
+        <div class="watcher">
+          <div class="eye">👀</div>
+          <div class="sees" id="sees">Café Wi‑Fi sees: —</div>
+        </div>
+        <div class="node" style="left:7%"><div class="ico">📱</div><small>Your phone</small></div>
+        <div class="node server off" id="serverNode" style="left:73%"><div class="ico">🛡️</div><small>Your server<br>Mumbai</small></div>
+        <div class="node" style="left:93%"><div class="ico">🌐</div><small>Websites</small></div>
+        <div id="packets"></div>
+      </div>
+
+      <div class="dest-card">
+        <div>The Wi‑Fi owner and your ISP see<strong id="seeIsp">every site name</strong></div>
+        <div>Websites think you are<strong id="seeIp">49.37.12.8 · Bhubaneswar</strong></div>
+        <div>Your traffic is<strong id="seeEnc">readable letters</strong></div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main>
+
+<!-- ═════════════════════════ HALVES ═════════════════════════ -->
+<section class="block" id="halves">
+  <div class="wrap">
+    <div class="block-head">
+      <h2>A VPN has two halves. Varnika is one of them.</h2>
+      <p class="lede">Your phone runs Varnika. The other end is a server that you, your company, or a VPN provider runs. They only connect if each side knows the other's public key. Untick the box to see what happens when the server hasn't been told about your phone.</p>
+    </div>
+
+    <div class="halves">
+      <div class="panel half">
+        <h3><span aria-hidden="true">📱</span> Phone (Varnika)</h3>
+        <ul>
+          <li><span class="key priv">private</span> Its own private key. Never leaves the phone.</li>
+          <li><span class="key pub">public</span> The server's public key, to be sure it's the real server.</li>
+          <li><span class="key addr">where</span> The server's address: <code>203.0.113.10:51820</code></li>
+        </ul>
+      </div>
+
+      <div class="bridge">
+        <button class="btn go" id="hsBtn">Try connecting</button>
+        <div class="result" id="hsResult" aria-live="polite"></div>
+      </div>
+
+      <div class="panel half">
+        <h3><span aria-hidden="true">🛡️</span> Server</h3>
+        <ul>
+          <li><span class="key priv">private</span> Its own private key.</li>
+          <li id="srvKnows"><span class="key pub">public</span> The phone's public key, so it accepts the phone.</li>
+          <li><span class="key addr">where</span> The phone's tunnel address: <code>10.8.0.2</code></li>
+        </ul>
+        <label class="check"><input type="checkbox" id="registered" checked> Server has been told the phone's public key</label>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═════════════════════════ FLOW ═════════════════════════ -->
+<section class="block" id="flow">
+  <div class="wrap">
+    <div class="block-head">
+      <h2>The complete flow, from config file to protected</h2>
+      <p class="lede">Nine steps, from getting a config to checking your history. Each one shows what you see, and what Varnika does underneath.</p>
+    </div>
+
+    <div class="flow">
+      <div class="phone" aria-hidden="true"><div class="screen" id="screen"></div></div>
+      <div>
+        <div class="steps-list" id="stepsList" role="list"></div>
+        <div class="step-detail" id="stepDetail" aria-live="polite"></div>
+        <div class="stepper-ctl">
+          <button class="btn ghost" id="prevStep">Previous</button>
+          <button class="btn" id="nextStep">Next step</button>
+          <button class="btn ghost" id="playSteps">Play all</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═════════════════════════ CONFIG ═════════════════════════ -->
+<section class="block" id="config">
+  <div class="wrap">
+    <div class="block-head">
+      <h2>Inside a <code style="font-family:var(--mono);font-size:.8em">.conf</code> file</h2>
+      <p class="lede">A config is a short, standard text file that every WireGuard app understands. Tap any line to see what it does.</p>
+    </div>
+
+    <div class="anat">
+      <div class="conf" id="conf" role="group" aria-label="Example WireGuard config"></div>
+      <div class="panel explain" id="explain"></div>
+    </div>
+
+    <div class="routes">
+      <h3>AllowedIPs decides what goes through the tunnel</h3>
+      <p class="lede" style="font-size:16px">Pick a value and watch where four everyday destinations go.</p>
+      <div class="seg" id="aiSeg" role="group" aria-label="AllowedIPs value" style="margin-top:16px">
+        <button aria-pressed="true" data-v="all">0.0.0.0/0, ::/0</button>
+        <button aria-pressed="false" data-v="home">192.168.1.0/24</button>
+        <button aria-pressed="false" data-v="office">10.20.0.0/16</button>
+      </div>
+      <div class="route-grid" id="routeGrid"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═════════════════════════ SOURCES ═════════════════════════ -->
+<section class="block" id="sources">
+  <div class="wrap">
+    <div class="block-head">
+      <h2>Where config files come from</h2>
+      <p class="lede">Software almost always generates the keys. What differs is who runs the server and how the file reaches your phone.</p>
+    </div>
+    <div class="seg" id="srcSeg" role="tablist" aria-label="Config sources"></div>
+    <div class="src-body" id="srcBody"></div>
+  </div>
+</section>
+
+<!-- ═════════════════════════ SPLIT ═════════════════════════ -->
+<section class="block" id="split">
+  <div class="wrap">
+    <div class="block-head">
+      <h2>Split tunneling: choose which apps use the VPN</h2>
+      <p class="lede">Some banking and UPI apps refuse to work over a VPN. Others don't need it. Pick a mode, tick apps, and see where each app's traffic goes.</p>
+    </div>
+    <div class="seg" id="splitSeg" role="group" aria-label="Split tunnel mode">
+      <button aria-pressed="false" data-m="all">All apps</button>
+      <button aria-pressed="true" data-m="exclude">Bypass</button>
+      <button aria-pressed="false" data-m="include">Only</button>
+    </div>
+    <div class="split">
+      <div class="panel"><div class="apps" id="apps" role="group" aria-label="Apps"></div></div>
+      <div>
+        <div class="lanes">
+          <div class="lane2 t"><h4>🛡️ Through the tunnel</h4><p>Encrypted, and websites see your server's address.</p><div class="chips" id="laneVpn"></div></div>
+          <div class="lane2"><h4>➡️ Direct</h4><p>Uses your normal connection, as if Varnika were off.</p><div class="chips" id="laneDirect"></div></div>
+        </div>
+        <p class="split-note" id="splitNote"></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═════════════════════════ KILL SWITCH ═════════════════════════ -->
+<section class="block" id="killswitch">
+  <div class="wrap">
+    <div class="block-head">
+      <h2>Kill switch: what happens when the tunnel drops</h2>
+      <p class="lede">Mobile networks hiccup. Without a kill switch, apps quietly fall back to the open network. Android's built-in kill switch, which Varnika walks you through enabling, blocks everything until the tunnel is back.</p>
+    </div>
+    <div class="ks">
+      <div class="panel ks-ctl">
+        <div class="toggle-row"><div><b>Always-on VPN</b><small>Android starts Varnika at boot and after crashes</small></div><button class="tsw" id="ksAlways" role="switch" aria-checked="false" aria-label="Always-on VPN"></button></div>
+        <div class="toggle-row"><div><b>Block connections without VPN</b><small>The actual kill switch</small></div><button class="tsw" id="ksBlock" role="switch" aria-checked="false" aria-label="Block connections without VPN"></button></div>
+        <button class="btn go" id="ksRun">Simulate a dropped tunnel</button>
+      </div>
+      <div class="panel">
+        <b>One minute on a train, second by second</b>
+        <div class="timeline" id="tl" aria-hidden="true"></div>
+        <div class="tl-legend"><span><b style="background:var(--teal)"></b>Protected</span><span><b style="background:var(--rose)"></b>Leaking on open network</span><span><b style="background:#9B97C4"></b>Blocked, nothing leaves</span></div>
+        <p class="ks-result" id="ksResult" aria-live="polite">Set the switches, then simulate a drop.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═════════════════════════ USE CASES ═════════════════════════ -->
+<section class="block" id="usecases">
+  <div class="wrap">
+    <div class="block-head">
+      <h2>Who uses it, and how</h2>
+      <p class="lede">Same app, very different setups. The difference is mostly in the server and the AllowedIPs line.</p>
+    </div>
+    <div class="panel" style="padding:8px 20px">
+      <table class="uc-table">
+        <thead><tr><th>Who</th><th>The problem</th><th>Varnika setup</th><th>Features that matter</th></tr></thead>
+        <tbody id="ucBody"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ═════════════════════════ CASE STUDIES ═════════════════════════ -->
+<section class="block" id="cases">
+  <div class="wrap">
+    <div class="block-head">
+      <h2>Case studies</h2>
+      <p class="lede">Four realistic setups, start to finish: what each person needed, how they set it up, and what changed.</p>
+    </div>
+    <div class="cases-tabs" id="caseTabs" role="tablist" aria-label="Case studies"></div>
+    <div id="caseBody"></div>
+    <p class="illustrative">These are illustrative scenarios, built from common real-world setups. The people are fictional.</p>
+  </div>
+</section>
+
+<!-- ═════════════════════════ ARCHITECTURE ═════════════════════════ -->
+<section class="block arch" id="inside">
+  <div class="wrap">
+    <div class="block-head">
+      <h2>Inside the app: what a tap on Connect sets off</h2>
+      <p class="lede">The Flutter interface never touches your packets. It hands the config to native Android code, which runs the official WireGuard engine through Android's VPN system.</p>
+    </div>
+    <div class="panel">
+      <svg viewBox="0 0 960 430" role="img" aria-label="Architecture: Flutter UI, Kotlin bridge, WireGuard engine, Android VpnService, server">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="#9B97C4"/>
+          </marker>
+        </defs>
+        <rect class="layer" x="10" y="20" width="270" height="390" rx="18"/>
+        <text class="layer-t" x="30" y="46">Flutter (Dart)</text>
+        <rect class="layer" x="300" y="20" width="400" height="390" rx="18"/>
+        <text class="layer-t" x="320" y="46">Android (Kotlin + WireGuard)</text>
+        <rect class="layer" x="720" y="20" width="230" height="390" rx="18"/>
+        <text class="layer-t" x="740" y="46">Internet</text>
+
+        <g class="box" id="b-ui"><rect x="30" y="70" width="230" height="70" rx="14"/><text x="48" y="100">Connect button</text><text class="sub" x="48" y="122">home_screen.dart</text></g>
+        <g class="box" id="b-state"><rect x="30" y="180" width="230" height="70" rx="14"/><text x="48" y="210">App state</text><text class="sub" x="48" y="232">app_state.dart</text></g>
+        <g class="box" id="b-chan"><rect x="30" y="290" width="230" height="70" rx="14"/><text x="48" y="320">Platform channel</text><text class="sub" x="48" y="342">vpn_channel.dart</text></g>
+
+        <g class="box" id="b-bridge"><rect x="320" y="290" width="170" height="70" rx="14"/><text x="338" y="320">VpnBridge</text><text class="sub" x="338" y="342">permission, events</text></g>
+        <g class="box" id="b-mgr"><rect x="320" y="180" width="170" height="70" rx="14"/><text x="338" y="210">TunnelManager</text><text class="sub" x="338" y="232">split rules, stats</text></g>
+        <g class="box" id="b-wg"><rect x="510" y="180" width="170" height="70" rx="14"/><text x="528" y="210">WireGuard</text><text class="sub" x="528" y="232">GoBackend</text></g>
+        <g class="box" id="b-vpn"><rect x="510" y="70" width="170" height="70" rx="14"/><text x="528" y="100">Android VPN</text><text class="sub" x="528" y="122">VpnService</text></g>
+        <g class="box" id="b-notif"><rect x="510" y="290" width="170" height="70" rx="14"/><text x="528" y="320">Notification</text><text class="sub" x="528" y="342">+ Quick tile</text></g>
+
+        <g class="box" id="b-srv"><rect x="740" y="180" width="190" height="70" rx="14"/><text x="758" y="210">Your server</text><text class="sub" x="758" y="232">UDP 51820</text></g>
+        <g class="box" id="b-web"><rect x="740" y="70" width="190" height="70" rx="14"/><text x="758" y="100">Websites</text><text class="sub" x="758" y="122">see server's IP</text></g>
+
+        <path class="edge" id="e1" d="M145 140 V178"/>
+        <path class="edge" id="e2" d="M145 250 V288"/>
+        <path class="edge" id="e3" d="M260 325 H318"/>
+        <path class="edge" id="e4" d="M405 290 V252"/>
+        <path class="edge" id="e5" d="M490 215 H508"/>
+        <path class="edge" id="e6" d="M595 180 V142"/>
+        <path class="edge" id="e7" d="M680 215 H738"/>
+        <path class="edge" id="e8" d="M835 180 V142"/>
+        <path class="edge" id="e9" d="M490 230 C 520 260, 520 300, 508 318"/>
+        <path class="edge" id="e10" d="M320 340 C 290 380, 200 380, 145 362"/>
+      </svg>
+      <div class="stepper-ctl" style="margin-top:8px">
+        <button class="btn go" id="traceBtn">Trace a connect</button>
+        <button class="btn ghost" id="traceNext">Step through</button>
+      </div>
+      <p class="trace-cap" id="traceCap" aria-live="polite">Press <b>Trace a connect</b> to follow one tap through every layer.</p>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <a class="brand" href="https://github.com/mrajkishor/varnika"><b style="color:#fff">Varnika</b><span>वर्णिक</span></a>
+    <p>Open source under Apache 2.0. Read the full guide, server setup and troubleshooting in the <a href="https://github.com/mrajkishor/varnika#readme">README</a>.</p>
+    <p style="font-size:13px">WireGuard is a registered trademark of Jason A. Donenfeld. IP addresses on this page are documentation examples.</p>
+  </div>
+</footer>
+
+<script>
+(() => {
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const $ = (s, r = document) => r.querySelector(s);
+  const el = (tag, attrs = {}, html = '') => { const n = document.createElement(tag); for (const k in attrs) n.setAttribute(k, attrs[k]); n.innerHTML = html; return n; };
+
+  /* ───────────── hero tunnel simulator ───────────── */
+  const sim = $('#sim'), sw = $('#vpnSwitch'), packetsEl = $('#packets');
+  const words = ['youtube.com', 'mybank.in', 'gmail.com', 'upi pay ₹450', 'news.site', 'maps: home', 'chat: hi maa'];
+  const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  const scramble = n => Array.from({ length: n }, () => B64[Math.random() * 64 | 0]).join('');
+  let on = false, packets = [], last = 0, spawnAt = 0;
+
+  function setVpn(v) {
+    on = v;
+    sw.setAttribute('aria-checked', v);
+    $('#switchLabel').textContent = v ? 'VPN on' : 'VPN off';
+    sim.classList.toggle('on', v);
+    $('#serverNode').classList.toggle('off', !v);
+    $('#simStatus').innerHTML = v
+      ? '<strong>Protected.</strong> Everything between your phone and your server is scrambled.'
+      : '<strong>Not protected.</strong> The café Wi‑Fi can read where you go.';
+    $('#seeIsp').textContent = v ? 'scrambled data to one server' : 'every site name';
+    $('#seeIp').textContent = v ? '203.0.113.10 · Mumbai' : '49.37.12.8 · Bhubaneswar';
+    $('#seeEnc').textContent = v ? 'sealed with WireGuard' : 'readable letters';
+  }
+  sw.addEventListener('click', () => setVpn(!on));
+
+  function spawn() {
+    const word = words[Math.random() * words.length | 0];
+    const n = el('span', { class: 'packet' }, word);
+    packetsEl.appendChild(n);
+    packets.push({ n, word, x: 7, row: (Math.random() - .5) * 0.6 });
+  }
+  function frame(t) {
+    const dt = Math.min(64, t - (last || t)); last = t;
+    if (t > spawnAt) { spawn(); spawnAt = t + (on ? 900 : 1100); }
+    const speed = dt * 0.012;
+    packets = packets.filter(p => {
+      p.x += speed;
+      const sealed = on && p.x < 73;
+      if (sealed) {
+        if (!p.n.classList.contains('enc')) p.n.classList.add('enc');
+        p.n.textContent = scramble(Math.max(8, p.word.length));
+      } else if (p.n.classList.contains('enc')) {
+        p.n.classList.remove('enc'); p.n.textContent = p.word;
+      }
+      if (p.x > 40 && p.x < 44 && !p.seen) {
+        p.seen = true;
+        $('#sees').textContent = 'Café Wi‑Fi sees: ' + (on ? p.n.textContent.slice(0, 12) + '…' : p.word);
+      }
+      p.n.style.left = p.x + '%';
+      p.n.style.top = `calc(var(--mid) + ${p.row * 22}px)`;
+      if (p.x > 93) { p.n.remove(); return false; }
+      return true;
+    });
+    requestAnimationFrame(frame);
+  }
+  if (!reduce) requestAnimationFrame(frame);
+  else {
+    // Static illustration for reduced motion: three still packets, updated on toggle.
+    const render = () => {
+      packetsEl.innerHTML = '';
+      [[22, 'youtube.com'], [50, 'mybank.in'], [84, 'gmail.com']].forEach(([x, w]) => {
+        const sealed = on && x < 73;
+        const n = el('span', { class: 'packet' + (sealed ? ' enc' : '') }, sealed ? scramble(11) : w);
+        n.style.left = x + '%'; packetsEl.appendChild(n);
+      });
+      $('#sees').textContent = 'Café Wi‑Fi sees: ' + (on ? 'scrambled…' : 'mybank.in');
+    };
+    sw.addEventListener('click', render); render();
+  }
+  setVpn(false);
+
+  /* ───────────── handshake ───────────── */
+  const reg = $('#registered');
+  reg.addEventListener('change', () => { $('#srvKnows').classList.toggle('missing', !reg.checked); $('#hsResult').textContent = ''; $('#hsResult').className = 'result'; });
+  $('#hsBtn').addEventListener('click', () => {
+    const r = $('#hsResult');
+    r.className = 'result'; r.textContent = 'Handshake: Waiting…';
+    setTimeout(() => {
+      if (reg.checked) { r.className = 'result ok'; r.textContent = 'Handshake: Healthy ✓'; }
+      else { r.className = 'result bad'; r.textContent = 'No reply. The server ignores unknown phones.'; }
+    }, reduce ? 0 : 1100);
+  });
+
+  /* ───────────── flow stepper ───────────── */
+  const sbar = '<div class="sbar"><span>9:41</span><span>●●● 🔋</span></div>';
+  const head = '<div class="app-head"><b>Varnika</b><span>वर्णिक</span></div>';
+  const vpnKey = '<div class="sbar"><span>9:41</span><span>🔑 ●●● 🔋</span></div>';
+  const steps = [
+    {
+      t: 'Get a config file', who: ['Your server', 'wg-easy / PiVPN', 'VPN provider'],
+      p: 'Whoever runs the server creates keys for your phone, registers its public key, and writes a small file like riya-mumbai.conf. It is often shown as a QR code.',
+      hood: '<span class="c"># on the server</span>\n<span class="k">wg genkey</span> | tee riya.key | <span class="k">wg pubkey</span> > riya.pub\n<span class="c"># add riya.pub as a [Peer], then:</span>\n<span class="k">qrencode</span> -t ansiutf8 < riya-mumbai.conf',
+      scr: `${sbar}<div class="scr-body" style="justify-content:center"><div class="code-mini">[Interface]
+PrivateKey = yAnz…BmK=
+Address = 10.8.0.2/32
+DNS = 1.1.1.1
+
+[Peer]
+PublicKey = xTIB…p8Dg=
+Endpoint = 203.0.113.10:51820
+AllowedIPs = 0.0.0.0/0</div><p style="text-align:center;color:#6B6890">riya-mumbai.conf</p></div>`
+    },
+    {
+      t: 'Import it into Varnika', who: ['Scan QR', 'Import .conf', 'Paste', 'Create from scratch'],
+      p: 'Tap Add tunnel and pick a way in. The QR scanner only accepts real WireGuard configs, and file import names the tunnel after the file.',
+      hood: '<span class="c">// add_tunnel_sheet.dart → qr_scan_screen.dart</span>\nif (text.contains(<span class="s">"[Interface]"</span>) && text.contains(<span class="s">"PrivateKey"</span>))\n  Navigator.pop(context, text);',
+      scr: `${sbar}<div class="scr-body"><b style="font-size:15px">Scan config QR</b><div class="camera"><div class="frame"><div class="qr"></div></div></div><p style="text-align:center;color:#6B6890">Point the camera at a WireGuard QR code</p></div>`
+    },
+    {
+      t: 'Check and save', who: ['Live preview', 'Two parsers'],
+      p: 'The editor previews the endpoint, addresses and DNS as you type. Varnika checks the file twice: once with its own parser for friendly, line-numbered errors, and again with the official WireGuard parser. Keys are then stored encrypted by the Android Keystore.',
+      hood: '<span class="c">// Dart: friendly errors</span>\nWgConfig.parse(text)   <span class="c">// "Line 7: expected Key = Value"</span>\n<span class="c">// Kotlin: the official parser</span>\nConfig.parse(stream)    <span class="c">// com.wireguard.config</span>\nflutter_secure_storage  <span class="c">// Keystore-backed</span>',
+      scr: `${sbar}<div class="scr-body"><b style="font-size:15px">New tunnel</b><div class="mini-card"><div class="t">Name</div><b>Mumbai 🏠</b></div><div class="mini-card"><div class="t">Preview</div><div class="mini-row"><span>Endpoint</span><b>203.0.113.10:51820</b></div><div class="mini-row"><span>Address</span><b>10.8.0.2/32</b></div><div class="mini-row"><span>DNS</span><b>1.1.1.1</b></div><div class="mini-row"><span>Routing</span><b>All traffic</b></div></div><div style="margin-top:auto;background:#1E1B4B;color:#fff;text-align:center;padding:12px;border-radius:12px;font-weight:700">Save tunnel</div></div>`
+    },
+    {
+      t: 'Tap Connect', who: ['Home screen', 'Tunnels switch', 'Quick tile'],
+      p: 'The big button acts on your selected tunnel. You can also use the switch in the Tunnels list, or the Varnika tile in Quick Settings.',
+      hood: '<span class="c">// app_state.dart</span>\nawait channel.requestNotificationPermission();\nfinal allowed = await channel.prepare();',
+      scr: `${sbar}${head}<div class="scr-body"><div class="headline">You're not protected<small>Tap the button to connect</small></div><div class="orb-wrap"><div class="orb"><div><div class="glyph">⏻</div>Connect</div></div></div><div class="mini-card"><div class="mini-row"><b>🏠 Mumbai</b><span>⇕</span></div><div class="t">203.0.113.10:51820</div></div></div>`
+    },
+    {
+      t: 'Allow the VPN (first time only)', who: ['Android system dialog'],
+      p: 'Android asks once whether Varnika may set up a VPN. This is a system safeguard every VPN app goes through. After you tap OK, it never asks again.',
+      hood: '<span class="c">// VpnBridge.kt</span>\nval intent = VpnService.prepare(activity)\nif (intent != null) activity.startActivityForResult(intent, REQ_VPN)',
+      scr: `${sbar}${head}<div class="scr-body"><div class="orb-wrap"><div class="orb"><div><div class="glyph">⏻</div>Connect</div></div></div></div><div class="dialog-scrim"><div class="dialog"><b style="font-size:14px">Connection request</b><p style="margin-top:6px">Varnika wants to set up a VPN connection that allows it to monitor network traffic. Only accept if you trust the source.</p><div class="acts"><span>Cancel</span><span>OK</span></div></div></div>`
+    },
+    {
+      t: 'Build the tunnel', who: ['Kotlin', 'WireGuard GoBackend'],
+      p: 'Kotlin turns your config and split-tunnel choice into a WireGuard configuration, then asks the WireGuard engine to bring the tunnel up through Android\'s VPN system.',
+      hood: '<span class="c">// TunnelManager.kt (background thread)</span>\nval config = req.buildConfig()   <span class="c">// + excluded/included apps</span>\npublish(Status(CONNECTING))\nbackend.setState(tunnel, Tunnel.State.UP, config)',
+      scr: `${sbar}${head}<div class="scr-body"><div class="headline">Connecting…<small>Setting up a secure tunnel</small></div><div class="orb-wrap"><div class="orb busy"><div><div class="glyph">⏻</div>Connecting</div></div></div><div class="mini-card"><div class="mini-row"><b>🏠 Mumbai</b><span>⇕</span></div><div class="t">203.0.113.10:51820</div></div></div>`
+    },
+    {
+      t: 'Handshake, and you\'re protected', who: ['Key icon in status bar', 'IP check'],
+      p: 'Your phone and server prove who they are with their keys. The button turns teal, Android shows a key icon, and the IP card switches to your server\'s location.',
+      hood: '<span class="c">// status event → Flutter</span>\n{ state: <span class="s">"up"</span>, tunnelName: <span class="s">"Mumbai"</span>, since: 1762… }\n<span class="c">// then: GET ipinfo.io/json → 203.0.113.10 · Mumbai</span>',
+      scr: `${vpnKey}${head}<div class="scr-body"><div class="headline">You're protected<small>Traffic is encrypted with WireGuard</small></div><div class="orb-wrap"><div class="orb up"><div><div class="glyph">✓</div>Protected</div></div></div><div class="mini-card"><div class="t">The internet now sees</div><b>🇮🇳 203.0.113.10 · Mumbai</b></div></div>`
+    },
+    {
+      t: 'Watch it live', who: ['Session card', 'Speed graph', 'Notification'],
+      p: 'Every second Varnika reads the tunnel counters: download, upload, speed, and when the server last replied. The notification shows the same numbers with a Disconnect button.',
+      hood: '<span class="c">// polled every 1s</span>\nbackend.getStatistics(tunnel)\n  .totalRx() / .totalTx() / latestHandshakeEpochMillis()\n<span class="c">// handshake < 150s → Healthy, < 300s → Stale, else No reply</span>',
+      scr: `${vpnKey}<div class="scr-body" style="padding-top:10px"><div class="notif"><b>Protected · Mumbai</b><div style="color:#6B6890">↓ 12 MB   ↑ 1.4 MB · 00:08:21</div><div class="act">DISCONNECT</div></div><div class="mini-card"><div class="mini-row"><span class="t">Session</span><b>00:08:21</b></div><div class="mini-row" style="margin-top:6px"><span>↓ 12 MB<br><small style="color:#6B6890">4.2 Mbps</small></span><span>↑ 1.4 MB<br><small style="color:#6B6890">320 Kbps</small></span><span style="color:#14B8A6">Healthy<br><small style="color:#6B6890">32s ago</small></span></div></div><div class="mini-card"><div class="t">Last minute</div><div class="bars"><i style="height:30%"></i><i style="height:55%"></i><i style="height:40%"></i><i style="height:80%"></i><i style="height:65%"></i><i style="height:90%"></i><i style="height:50%"></i><i style="height:70%"></i></div></div></div>`
+    },
+    {
+      t: 'Disconnect, and see your history', who: ['Insights tab'],
+      p: 'Disconnect from the app, notification or tile. Varnika saves the session (tunnel name, time and data only, never websites), and Insights adds it to your weekly chart.',
+      hood: '<span class="c">// TunnelManager.finishSession()</span>\nhistory.add(name, start, end, rx, tx)   <span class="c">// last 300 kept</span>\nbackend.setState(tunnel, Tunnel.State.DOWN, null)',
+      scr: `${sbar}<div class="app-head"><b>Insights</b></div><div class="scr-body"><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><div class="mini-card"><div class="t">Data protected</div><b style="font-size:16px">58 MB</b></div><div class="mini-card"><div class="t">Time connected</div><b style="font-size:16px">41m</b></div></div><div class="mini-card"><div class="t">Last 7 days</div><div class="bars"><i style="height:20%"></i><i style="height:45%"></i><i style="height:10%"></i><i style="height:60%"></i><i style="height:35%"></i><i style="height:25%"></i><i style="height:85%"></i></div></div><div class="mini-card"><div class="mini-row"><b>Mumbai</b><b>58 MB</b></div><div class="t">9 Nov, 09:12 · 41m</div></div></div>`
+    }
+  ];
+  let cur = 0, playing = null;
+  const list = $('#stepsList');
+  steps.forEach((s, i) => {
+    const b = el('button', { role: 'listitem' }, `<span class="n">${String(i + 1).padStart(2, '0')}</span><span>${s.t}</span>`);
+    b.addEventListener('click', () => { stopPlay(); show(i); });
+    list.appendChild(b);
+  });
+  function show(i) {
+    cur = i;
+    [...list.children].forEach((b, j) => {
+      b.toggleAttribute('aria-current', j === i); if (j === i) b.setAttribute('aria-current', 'step');
+      b.classList.toggle('done', j < i);
+    });
+    const s = steps[i];
+    $('#screen').innerHTML = s.scr;
+    $('#stepDetail').innerHTML = `<p class="step-no">Step ${i + 1} of ${steps.length}</p><h3>${s.t}</h3><p>${s.p}</p><div class="who">${s.who.map(w => `<span>${w}</span>`).join('')}</div><pre class="hood">${s.hood}</pre>`;
+    $('#prevStep').disabled = i === 0;
+    $('#nextStep').textContent = i === steps.length - 1 ? 'Start over' : 'Next step';
+  }
+  function stopPlay() { clearInterval(playing); playing = null; $('#playSteps').textContent = 'Play all'; }
+  $('#prevStep').addEventListener('click', () => { stopPlay(); show(Math.max(0, cur - 1)); });
+  $('#nextStep').addEventListener('click', () => { stopPlay(); show(cur === steps.length - 1 ? 0 : cur + 1); });
+  $('#playSteps').addEventListener('click', () => {
+    if (playing) return stopPlay();
+    $('#playSteps').textContent = 'Pause';
+    playing = setInterval(() => { if (cur === steps.length - 1) return stopPlay(); show(cur + 1); }, 3200);
+  });
+  show(0);
+
+  /* ───────────── conf anatomy ───────────── */
+  const confLines = [
+    { h: '<span class="cm"># Riya\'s phone → Mumbai server</span>', tag: '# comment', d: 'Comments start with #. WireGuard ignores them, so use them for notes.', a: 'A sticky note on the file.', r: 'Optional' },
+    { h: '<span class="sec">[Interface]</span>', tag: '[Interface]', d: 'Everything below, until [Peer], describes your phone. Exactly one per file.', a: 'The "about me" section.', r: 'Required, exactly once' },
+    { h: '<span class="kv"><b>PrivateKey</b> = yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=</span>', tag: 'PrivateKey', d: 'Your phone\'s secret key: 44 characters ending in "=". Anyone with it can pretend to be your phone, so never share it. Generated by software, never typed up.', a: 'Your house key.', r: 'Required' },
+    { h: '<span class="kv"><b>Address</b> = 10.8.0.2/32</span>', tag: 'Address', d: 'Your phone\'s address inside the tunnel. Each device gets its own, like 10.8.0.2, 10.8.0.3, and so on. /32 means exactly this one address.', a: 'Your seat number inside the tunnel.', r: 'Required by Varnika' },
+    { h: '<span class="kv"><b>DNS</b> = 1.1.1.1, 1.0.0.1</span>', tag: 'DNS', d: 'Who turns names like youtube.com into addresses while connected. Without it, Android uses its default, which may leak which sites you look up.', a: 'The phone book you use.', r: 'Optional, recommended' },
+    { h: '' , tag: '', d: '', a: '', r: '', blank: true },
+    { h: '<span class="sec">[Peer]</span>', tag: '[Peer]', d: 'Everything below describes the server. A file can have more than one [Peer], but phones usually have one.', a: 'The "about my friend" section.', r: 'Required, at least once' },
+    { h: '<span class="kv"><b>PublicKey</b> = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=</span>', tag: 'PublicKey', d: 'The server\'s public identity. Your phone only talks to a server holding the matching private key, so nobody can impersonate it.', a: 'Your friend\'s face, so you know it\'s really them.', r: 'Required' },
+    { h: '<span class="kv"><b>Endpoint</b> = 203.0.113.10:51820</span>', tag: 'Endpoint', d: 'Where the server is on the internet: an IP address or domain name, then the port. 51820 is WireGuard\'s usual port, using UDP.', a: 'Your friend\'s home address.', r: 'Required on phones' },
+    { h: '<span class="kv"><b>AllowedIPs</b> = 0.0.0.0/0, ::/0</span>', tag: 'AllowedIPs', d: 'Which destinations go through the tunnel. 0.0.0.0/0 and ::/0 mean everything, over both IPv4 and IPv6. A narrower value such as 192.168.1.0/24 sends only your home network through it. Try the picker below.', a: 'Which letters go in the secret tube.', r: 'Required' },
+    { h: '<span class="kv"><b>PersistentKeepalive</b> = 25</span>', tag: 'PersistentKeepalive', d: 'Sends a tiny ping every 25 seconds so mobile networks and routers don\'t forget the connection.', a: 'Saying "still here!" now and then.', r: 'Optional, recommended on phones' }
+  ];
+  const conf = $('#conf');
+  confLines.forEach((l, i) => {
+    const b = el('button', { 'aria-pressed': 'false' }, l.h || ' ');
+    if (l.blank) { b.disabled = true; b.style.cursor = 'default'; }
+    else b.addEventListener('click', () => pickLine(i));
+    b.addEventListener('mouseenter', () => !l.blank && pickLine(i));
+    conf.appendChild(b);
+  });
+  function pickLine(i) {
+    const l = confLines[i];
+    [...conf.children].forEach((b, j) => b.setAttribute('aria-pressed', j === i));
+    $('#explain').innerHTML = `<span class="tag">${l.tag}</span><p>${l.d}</p><p class="analogy">In plain words: ${l.a}</p><p class="req">${l.r}</p>`;
+  }
+  pickLine(9);
+
+  const routes = {
+    all:    { yt: 1, nas: 0, intra: 0, bank: 1, note: '' },
+    home:   { yt: 0, nas: 1, intra: 0, bank: 0 },
+    office: { yt: 0, nas: 0, intra: 1, bank: 0 }
+  };
+  const dests = [
+    ['yt', 'youtube.com', 'A public website'],
+    ['bank', 'mybank.in', 'Your bank'],
+    ['nas', '192.168.1.50', 'NAS at home'],
+    ['intra', '10.20.3.4', 'Office dashboard']
+  ];
+  function drawRoutes(v) {
+    const g = $('#routeGrid'); g.innerHTML = '';
+    dests.forEach(([k, name, sub]) => {
+      const via = routes[v][k];
+      const reach = via || (k !== 'nas' && k !== 'intra');
+      const r = el('div', { class: 'route' + (via ? ' vpn' : '') },
+        `<div class="dst">${name}<small>${sub}</small></div><div class="path"></div><div class="verdict">${via ? 'Via tunnel' : reach ? 'Direct' : 'Unreachable'}</div>`);
+      g.appendChild(r);
+    });
+  }
+  $('#aiSeg').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    [...$('#aiSeg').children].forEach(x => x.setAttribute('aria-pressed', x === b));
+    drawRoutes(b.dataset.v);
+  });
+  drawRoutes('all');
+
+  /* ───────────── sources ───────────── */
+  const sources = [
+    {
+      t: 'A VPN provider',
+      steps: ['Log in on the provider\'s website.', 'Open its WireGuard configuration page.', 'Pick a country and download the .conf, or show the QR code.', 'In Varnika: Add tunnel, then Import .conf file or Scan QR code.'],
+      tools: ['Mullvad', 'Proton VPN', 'IVPN', 'AirVPN'],
+      side: '<h3>Best for</h3><p class="lede" style="font-size:16px;margin-top:6px">People who want a VPN without running a server. The provider runs the servers and generates your keys; Varnika is simply a nicer client for them.</p>'
+    },
+    {
+      t: 'A server tool',
+      steps: ['Install a tool on your server (a cloud VPS, Raspberry Pi or router).', 'Add a device by name, for example "riya".', 'The tool generates keys, registers the phone, and writes riya.conf.', 'Scan the QR code it shows with Varnika.'],
+      tools: ['wg-easy (web dashboard)', 'PiVPN', 'wireguard-install.sh', 'OPNsense / pfSense', 'Home routers'],
+      side: '<pre class="snip"><span style="color:#8F8BC0"># PiVPN example</span>\npivpn add -n riya\npivpn -qr riya</pre><p class="lede" style="font-size:15px">The most common self-hosting setup. One command per device.</p>'
+    },
+    {
+      t: 'By hand',
+      steps: ['Generate keys with wg genkey and wg pubkey.', 'Add the phone\'s public key as a [Peer] on the server.', 'Type the phone\'s .conf in a text editor.', 'Paste it into Varnika, or turn it into a QR code with qrencode.'],
+      tools: ['wg', 'qrencode', 'any text editor'],
+      side: '<pre class="snip">wg genkey | tee phone.key \\\n  | wg pubkey > phone.pub\nqrencode -t ansiutf8 < phone.conf</pre><p class="lede" style="font-size:15px">Full control, and a great way to learn. The README has all 10 steps.</p>'
+    },
+    {
+      t: 'Create from scratch',
+      steps: ['In Varnika: Add tunnel, then Create from scratch.', 'Varnika generates a key pair on the phone.', 'Send only the public key to whoever runs the server.', 'Fill in the server\'s public key and Endpoint, then save.'],
+      tools: ['Varnika Key generator'],
+      side: '<h3>Why it\'s the most private</h3><p class="lede" style="font-size:16px;margin-top:6px">Your private key is born on the phone and never travels anywhere. The server only ever sees your public key.</p>'
+    }
+  ];
+  const srcSeg = $('#srcSeg');
+  sources.forEach((s, i) => {
+    const b = el('button', { role: 'tab', 'aria-selected': i === 0 }, s.t);
+    b.addEventListener('click', () => showSrc(i));
+    srcSeg.appendChild(b);
+  });
+  function showSrc(i) {
+    [...srcSeg.children].forEach((b, j) => b.setAttribute('aria-selected', j === i));
+    const s = sources[i];
+    $('#srcBody').innerHTML = `<div class="panel"><ol class="chain">${s.steps.map(x => `<li>${x}</li>`).join('')}</ol><div class="pill-row">${s.tools.map(x => `<span>${x}</span>`).join('')}</div></div><div class="panel">${s.side}</div>`;
+  }
+  showSrc(1);
+
+  /* ───────────── split tunnel ───────────── */
+  const apps = [
+    ['🌐', 'Chrome', 'com.android.chrome', false],
+    ['▶️', 'YouTube', 'com.google.android.youtube', false],
+    ['💸', 'PhonePe', 'com.phonepe.app', true],
+    ['🏦', 'SBI YONO', 'com.sbi.lotusintouch', true],
+    ['💬', 'WhatsApp', 'com.whatsapp', false],
+    ['🎬', 'Netflix', 'com.netflix.mediaclient', false],
+    ['🦊', 'Firefox', 'org.mozilla.firefox', false]
+  ];
+  let mode = 'exclude';
+  const appsEl = $('#apps');
+  apps.forEach((a, i) => {
+    const b = el('button', { class: 'app-row', role: 'checkbox', 'aria-checked': a[3] },
+      `<span class="ai">${a[0]}</span><span class="nm">${a[1]}<small>${a[2]}</small></span><span class="box">✓</span>`);
+    b.addEventListener('click', () => { a[3] = !a[3]; b.setAttribute('aria-checked', a[3]); drawSplit(); });
+    appsEl.appendChild(b);
+  });
+  $('#splitSeg').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    mode = b.dataset.m;
+    [...$('#splitSeg').children].forEach(x => x.setAttribute('aria-pressed', x === b));
+    drawSplit();
+  });
+  function drawSplit() {
+    appsEl.classList.toggle('disabled', mode === 'all');
+    const vpn = [], direct = [];
+    apps.forEach(a => {
+      const ticked = a[3];
+      const through = mode === 'all' ? true : mode === 'exclude' ? !ticked : ticked;
+      (through ? vpn : direct).push(`<span>${a[0]} ${a[1]}</span>`);
+    });
+    $('#laneVpn').innerHTML = vpn.join('') || '<span style="opacity:.6">No apps</span>';
+    $('#laneDirect').innerHTML = direct.join('') || '<span style="opacity:.6">No apps</span>';
+    const n = apps.filter(a => a[3]).length;
+    $('#splitNote').textContent =
+      mode === 'all' ? 'Every app goes through the VPN. Ticks are ignored in this mode.' :
+      mode === 'exclude' ? `${n} ticked app${n === 1 ? '' : 's'} skip the VPN. Typical choice: banking and UPI apps that block VPNs.` :
+      n === 0 ? 'Tick at least one app. Varnika won\'t save "Only" with nothing selected.' :
+      `Only ${n} app${n === 1 ? '' : 's'} use the VPN; everything else stays fast and direct.`;
+  }
+  drawSplit();
+
+  /* ───────────── kill switch ───────────── */
+  const tl = $('#tl');
+  for (let i = 0; i < 12; i++) tl.appendChild(el('i'));
+  const tsw = id => { const b = $(id); b.addEventListener('click', () => b.setAttribute('aria-checked', b.getAttribute('aria-checked') !== 'true')); return b; };
+  const ksA = tsw('#ksAlways'), ksB = tsw('#ksBlock');
+  let ksTimer;
+  $('#ksRun').addEventListener('click', () => {
+    clearTimeout(ksTimer);
+    const always = ksA.getAttribute('aria-checked') === 'true';
+    const block = ksB.getAttribute('aria-checked') === 'true';
+    // 12 slots × 5s. Tunnel drops at slot 3.
+    const plan = Array.from({ length: 12 }, (_, i) => {
+      if (i < 3) return 'safe';
+      if (block) return i < (always ? 5 : 6) ? 'block' : 'safe';
+      return i < (always ? 5 : 9) ? 'leak' : 'safe';
+    });
+    const cells = [...tl.children];
+    cells.forEach(c => c.className = '');
+    $('#ksResult').textContent = 'Riding the train…';
+    let i = 0;
+    const tick = () => {
+      cells[i].className = plan[i];
+      i++;
+      if (i < 12) ksTimer = setTimeout(tick, reduce ? 0 : 220);
+      else {
+        const leaked = plan.filter(p => p === 'leak').length * 5;
+        const blocked = plan.filter(p => p === 'block').length * 5;
+        $('#ksResult').innerHTML = leaked
+          ? `<strong style="color:var(--rose)">${leaked} seconds leaked.</strong> Apps kept running over the open network until the tunnel ${always ? 'came back by itself' : 'was reconnected by hand'}.${always ? ' Turn on the block switch to stop the leak.' : ''}`
+          : `<strong style="color:var(--teal)">Nothing leaked.</strong> Android blocked all traffic for ${blocked} seconds${always ? ' while Varnika reconnected your last tunnel automatically' : '. Turn on Always-on too, so Varnika reconnects by itself'}.`;
+      }
+    };
+    tick();
+  });
+
+  /* ───────────── use cases ───────────── */
+  const ucs = [
+    ['☕', 'Public Wi‑Fi user', 'Café, airport and college Wi‑Fi can be watched by whoever runs it.', 'Full tunnel <code>0.0.0.0/0, ::/0</code> to any server', 'Quick tile, IP check, kill switch'],
+    ['🔒', 'Privacy-minded person', 'Doesn\'t want a VPN company to see or log their traffic.', 'Own cloud server, full tunnel', 'Create from scratch, no accounts, history without destinations'],
+    ['🏠', 'Self-hoster', 'Wants their NAS, cameras or Home Assistant from anywhere, without exposing them online.', 'Server at home, <code>192.168.1.0/24</code> only', 'Handshake health, split routes, QR import'],
+    ['💼', 'Developer or IT team', 'Staging servers and dashboards live on a private network.', 'Office gateway, <code>10.20.0.0/16</code>, one config per person', 'Multiple tunnels, live switching, export'],
+    ['✈️', 'Traveller abroad', 'Home apps and services behave differently or block foreign IPs.', 'Server in the home country, full tunnel', 'Live switching, Bypass for local apps'],
+    ['🇮🇳', 'UPI and banking user', 'Payment apps refuse to work when a VPN is on.', 'Any full tunnel', 'Split tunneling (Bypass)'],
+    ['🧑‍💻', 'Existing WireGuard user', 'The official app works but shows little.', 'Import existing configs or scan QR codes', 'Live stats, Insights, kill switch guide']
+  ];
+  $('#ucBody').innerHTML = ucs.map(u => `<tr><td><span>${u[0]}</span>${u[1]}</td><td data-h="The problem">${u[2]}</td><td data-h="Varnika setup">${u[3]}</td><td data-h="Features that matter">${u[4]}</td></tr>`).join('');
+
+  /* ───────────── case studies ───────────── */
+  const cases = [
+    {
+      av: '✈️', name: 'Riya', role: 'Student, Bhubaneswar',
+      h: 'Safe on airport and college Wi‑Fi, without breaking UPI',
+      meta: 'Server: a small cloud server in Mumbai, set up by her brother',
+      need: 'Riya spends a lot of time on public Wi‑Fi at college and airports. She wanted her browsing private, but her UPI app refused to open whenever a VPN was on.',
+      setup: 'Her brother added her as a peer on his WireGuard server and showed her a QR code. She scanned it, named the tunnel "Mumbai", added the Varnika tile to Quick Settings, and set PhonePe and her bank app to Bypass.',
+      result: 'One tap from the notification shade protects her on any network. Payments keep working because those two apps skip the tunnel. Insights shows how much she has protected each week.',
+      facts: [['1 tap', 'to connect, from Quick Settings'], ['2 apps', 'bypass the VPN'], ['0', 'accounts or subscriptions']]
+    },
+    {
+      av: '🏠', name: 'Arjun', role: 'Photographer and self-hoster, Pune',
+      h: 'Reaching a home NAS from anywhere, without opening it to the internet',
+      meta: 'Server: PiVPN on a Raspberry Pi at home, with a dynamic DNS name',
+      need: 'Arjun keeps every photo shoot on a NAS at home. Sending clients previews while travelling meant exposing the NAS online, which he didn\'t want.',
+      setup: 'He installed PiVPN on a Raspberry Pi and ran "pivpn add" for his phone. He then edited the config so AllowedIPs covers only his home network (192.168.1.0/24), so YouTube and everything else stays direct.',
+      result: 'His NAS opens on the phone as if he were at home, while normal browsing stays at full speed. When the Pi lost power once, Handshake changed to "No reply", which told him straight away the problem was at home.',
+      facts: [['192.168.1.0/24', 'the only traffic sent through'], ['0 ports', 'opened on the NAS'], ['Instant', 'warning when home is offline']]
+    },
+    {
+      av: '💼', name: 'Studio Rekha', role: '8-person design studio, Bengaluru',
+      h: 'Giving a small team secure access to office tools',
+      meta: 'Server: WireGuard on the office firewall (OPNsense)',
+      need: 'The studio\'s file server, licence server and staging site only worked from the office. Remote days meant emailing large files around.',
+      setup: 'The admin created one config per person on the office firewall, each with its own key and address, and routed only the office networks (10.20.0.0/16). Staff imported their file, and the admin asked everyone to turn on Android\'s kill switch.',
+      result: 'Everyone reaches internal tools from home or on the road. When someone leaves, the admin removes just that person\'s key on the firewall. Nobody else has to change anything.',
+      facts: [['8', 'separate configs, one per person'], ['1 key', 'to revoke when someone leaves'], ['Office only', 'routed; the rest stays direct']]
+    },
+    {
+      av: '🌍', name: 'Meera', role: 'Researcher travelling abroad',
+      h: 'Keeping home services working from another country',
+      meta: 'Server: two cloud servers, one in India and one in Germany',
+      need: 'On a three-month fellowship in Europe, Meera found some Indian services blocked foreign IPs, while local transit and banking apps needed a European connection.',
+      setup: 'She kept two tunnels: "🇮🇳 Home" and "🇩🇪 Frankfurt". On the Home tunnel she set her local European apps to Bypass, and she switches tunnels live from the home screen depending on what she needs.',
+      result: 'Indian services see an Indian address, and local apps see her real one. Switching takes one tap and each session is logged separately, so she can see which tunnel she uses most.',
+      facts: [['2', 'tunnels, switched live'], ['1 tap', 'to change country'], ['Per-tunnel', 'bypass lists']]
+    }
+  ];
+  const tabs = $('#caseTabs');
+  cases.forEach((c, i) => {
+    const b = el('button', { class: 'case-tab', role: 'tab', 'aria-selected': i === 0 },
+      `<span class="av">${c.av}</span><span><b>${c.name}</b><small>${c.role}</small></span>`);
+    b.addEventListener('click', () => showCase(i));
+    tabs.appendChild(b);
+  });
+  function showCase(i) {
+    [...tabs.children].forEach((b, j) => b.setAttribute('aria-selected', j === i));
+    const c = cases[i];
+    $('#caseBody').innerHTML = `<div class="case"><div><h3>${c.h}</h3><p class="meta">${c.meta}</p><div class="story"><div><h4>The need</h4><p>${c.need}</p></div><div><h4>The setup</h4><p>${c.setup}</p></div><div><h4>The result</h4><p>${c.result}</p></div></div></div><div class="facts">${c.facts.map(f => `<div class="fact"><div class="v">${f[0]}</div><div class="l">${f[1]}</div></div>`).join('')}</div></div>`;
+  }
+  showCase(0);
+
+  /* ───────────── architecture trace ───────────── */
+  const trace = [
+    [['b-ui'], [], 'You tap <b>Connect</b> on the home screen.'],
+    [['b-state'], ['e1'], 'App state asks for notification permission, then calls <code>prepare()</code>.'],
+    [['b-chan'], ['e2'], 'The platform channel <code>varnika/vpn</code> carries the request to Android.'],
+    [['b-bridge'], ['e3'], 'VpnBridge shows Android\'s VPN permission dialog (first time only), then forwards <code>connect</code> with your config and split-tunnel choice.'],
+    [['b-mgr'], ['e4'], 'TunnelManager parses the config with the official WireGuard parser and applies the included or excluded apps.'],
+    [['b-wg'], ['e5'], 'The WireGuard engine (GoBackend) is asked to bring the tunnel <b>UP</b>.'],
+    [['b-vpn'], ['e6'], 'Android\'s VpnService creates the tunnel interface and the 🔑 icon appears in the status bar.'],
+    [['b-srv'], ['e7'], 'Encrypted UDP packets reach your server on port 51820, and the handshake completes.'],
+    [['b-web'], ['e8'], 'The server forwards your traffic; websites see the server\'s address, not yours.'],
+    [['b-notif'], ['e9'], 'Status <b>UP</b> updates the notification (live traffic + Disconnect) and the Quick Settings tile.'],
+    [['b-chan', 'b-state', 'b-ui'], ['e10'], 'A status event flows back to Flutter: the button turns teal, stats start updating every second, and the IP card refreshes.']
+  ];
+  let ti = -1, tTimer;
+  function lightTrace(i) {
+    document.querySelectorAll('.arch .lit').forEach(n => n.classList.remove('lit'));
+    if (i < 0) return;
+    const [boxes, edges, cap] = trace[i];
+    boxes.forEach(b => document.getElementById(b).classList.add('lit'));
+    edges.forEach(e => document.getElementById(e).classList.add('lit'));
+    $('#traceCap').innerHTML = `<b>${i + 1}/${trace.length}</b> · ${cap}`;
+  }
+  $('#traceBtn').addEventListener('click', () => {
+    clearInterval(tTimer); ti = 0; lightTrace(0);
+    tTimer = setInterval(() => { ti++; if (ti >= trace.length) { clearInterval(tTimer); return; } lightTrace(ti); }, reduce ? 2600 : 1700);
+  });
+  $('#traceNext').addEventListener('click', () => { clearInterval(tTimer); ti = (ti + 1) % trace.length; lightTrace(ti); });
+})();
+</script>
+</body>
+</html>
