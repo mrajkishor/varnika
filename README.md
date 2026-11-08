@@ -15,6 +15,7 @@ An interactive, visual walkthrough of the complete flow ([`docs/index.html`](doc
 - **Where configs come from:** VPN providers, server tools, by hand, and Create from scratch.
 - **Split tunneling playground:** tick apps and see which go through the tunnel and which go direct.
 - **Kill switch simulator:** drop the tunnel on a train ride and see what leaks, with and without the kill switch.
+- **The full system:** what you build (backend API, server agent) vs. what you install (WireGuard), a today vs. one-tap comparison, a step-through of the messages behind one Connect tap, the API, database, security checklist, scaling, costs, legal notes and rollout phases.
 - **Use cases and case studies:** a student on public Wi‑Fi, a self-hoster with a home NAS, a design studio team, and a researcher abroad.
 - **Inside the app:** an animated architecture diagram that traces one tap on Connect through every layer.
 
@@ -41,7 +42,8 @@ An interactive, visual walkthrough of the complete flow ([`docs/index.html`](doc
 14. [Security and privacy](#14-security-and-privacy)
 15. [Building the app](#15-building-the-app)
 16. [Architecture](#16-architecture)
-17. [License](#17-license)
+17. [The full system: from config files to one tap](#17-the-full-system-from-config-files-to-one-tap)
+18. [License](#18-license)
 
 ---
 
@@ -734,7 +736,7 @@ That's Android's standard indicator that a VPN is active.
 WireGuard is very fast. Speed mostly depends on your server's location and bandwidth. A nearby server is faster than one on another continent.
 
 **Can Varnika get configs automatically, like NordVPN?**
-Not today. That needs a backend service that creates a config for each user after they sign in (generating keys, registering the peer on the server, and sending the config to the app). It's a natural next step for this project.
+Not today. That needs a backend service that registers each phone on a server after the user signs in and sends the app its connection details. [Section 17](#17-the-full-system-from-config-files-to-one-tap) covers that design in full.
 
 **Is it legal?**
 Using a VPN is legal in most countries, including India, but some countries restrict VPNs. Follow your local laws and your network's rules.
@@ -841,7 +843,375 @@ Tap Connect (Flutter)
 
 Flutter never touches packets: it sends the config and split-tunnel choice to Kotlin, which builds a `com.wireguard.config.Config` and brings the tunnel up through Android's `VpnService` using [`com.wireguard.android:tunnel`](https://git.zx2c4.com/wireguard-android/).
 
-## 17. License
+## 17. The full system: from config files to one tap
+
+Today, a person makes a `.conf` file and loads it into Varnika. Consumer VPNs like NordVPN or Proton hide all of that: you pick a location and tap **Connect**. Getting there takes one more piece, a **backend that you build**.
+
+> 🎛️ The [interactive guide](https://htmlpreview.github.io/?https://github.com/mrajkishor/varnika/blob/main/docs/index.html#system) has a visual version of this section, with a today vs. full-system toggle, a clickable parts map, a step-through of the connect messages, a security checklist and a cost calculator.
+
+### 17.1 Is Varnika "just the UI"?
+
+No. Both ends of a VPN do real work:
+
+```
+Phone (Varnika)                               VPN server
+ UI + WireGuard engine                         WireGuard
+ encrypts / decrypts   ═══ encrypted tunnel ═══  decrypts / encrypts → internet
+```
+
+- **Varnika** shows the UI **and** runs the WireGuard engine on the phone. It encrypts every packet before it leaves the phone.
+- **The VPN server** decrypts the traffic and sends it to the internet, so websites see the server's location.
+- **The backend** (new) is the coordinator. It decides which phone may use which server and hands out connection details. It **never** carries user traffic.
+
+What *should* be hidden from normal users is the low-level detail: keys, `.conf` files, endpoints and AllowedIPs. In the full system, users see only **a location list and a Connect button**.
+
+### 17.2 Who does what: today vs. the full system
+
+| # | Today (config files) | Who | Full system (one tap) | Who |
+|---|---|---|---|---|
+| 1 | Rent a server, install WireGuard | 🧑 Person | You set up servers once, with a script | 🧑 You (operator) |
+| 2 | Generate keys for the phone | 🧑 Person | User signs in with a one-time code | 🧑 User + 📱 App + 🧠 Backend |
+| 3 | Add the phone's public key to the server by hand | 🧑 Person | Varnika creates keys on the phone, registers the public key | 📱 App + 🧠 Backend |
+| 4 | Write the `.conf`, send it or show a QR | 🧑 Person | User picks "Mumbai", taps Connect | 🧑 User |
+| 5 | User imports the file | 🧑 User | Backend picks a server, adds the phone's key there | 🧠 Backend + 🛡️ Server |
+| 6 | User taps Connect | 🧑 User | Varnika builds the config internally | 📱 App |
+| 7 | Tunnel comes up | 📱 + 🛡️ | Tunnel comes up | 📱 + 🛡️ |
+
+**Today:** 5 of 7 steps need someone who understands WireGuard.
+**Full system:** the user does two things: sign in, then tap Connect.
+
+### 17.3 Do I have to develop the VPN server?
+
+**No. You install the VPN server; you develop the coordination around it.**
+
+```
+            YOU BUILD                                 YOU INSTALL
+┌──────────────────────────────┐          ┌──────────────────────────────────┐
+│ Backend API                  │  ──────▶ │ VPN server (WireGuard)           │
+│ accounts, locations,         │ private  │  + small agent (you build this)  │
+│ key registration, server     │ channel  │  + DNS resolver                  │
+│ choice                       │          │ Mumbai / Singapore / Frankfurt…  │
+└──────────────▲───────────────┘          └────────────────▲─────────────────┘
+               │ HTTPS: sign in, locations, connect        │ encrypted WireGuard tunnel
+               │                                           │
+        ┌──────┴───────────────────────────────────────────┴──────┐
+        │ Varnika app (already built; add simple mode)            │
+        └─────────────────────────────────────────────────────────┘
+```
+
+### 17.4 Every part of the system
+
+| Part | Where it runs | Build / install | Its job | What it stores | Must never |
+|---|---|---|---|---|---|
+| 📱 **Varnika app** | Each phone | Build (mostly done) | Location list + Connect; creates keys; asks the backend for details; runs WireGuard | Its private key (Keystore-encrypted), sign-in tokens, local history | Send the private key anywhere |
+| 🧠 **Backend API** | Your cloud | **Build** (main project) | Sign-in, locations, register device public keys, pick a server, assign a tunnel IP, tell the agent | Nothing itself (uses the database) | Carry user traffic |
+| 🗄️ **Database** | Your cloud | Install + design tables | Source of truth: users, devices, servers, peer assignments | Accounts, device public keys, server list, assignments | Store private keys, traffic, websites, DNS lookups |
+| 🔐 **Sign-in** | Your cloud | Use a service, or build | Email/SMS one-time code or Google sign-in; issues tokens | Email/phone, token hashes | Store plain-text passwords |
+| 💳 **Payments** (optional) | Provider | Use a service | Plans and subscriptions; the backend checks the plan before `/connect` | Plan status | Handle card numbers |
+| 🧭 **Admin dashboard** (optional) | Your cloud | Build | Add or drain servers, see load, look up users, remove devices | Nothing new | Show traffic data (there is none) |
+| 📈 **Monitoring** | Your cloud | Install | Server health, CPU, bandwidth, alerts | Server metrics only | Track user activity |
+| 🛡️ **WireGuard** | Each VPN server | **Install** | The VPN itself: decrypts and forwards traffic | Allowed phone keys and tunnel IPs (in memory) | Log traffic (it has no traffic logging) |
+| 🤖 **Server agent** | Each VPN server | **Build** (small) | Adds or removes phone keys on command from the backend; reports health | Nothing permanent; resyncs from the backend after a restart | Accept commands from anyone but the backend |
+| 📒 **DNS resolver** | Each VPN server | Install | Answers DNS inside the tunnel so lookups don't leak to the ISP | Short-lived cache | Keep query logs |
+
+### 17.5 Build vs. install
+
+| Piece | Build or install? | Typical tools | Effort |
+|---|---|---|---|
+| WireGuard (the VPN itself) | Install | `apt install wireguard` | Minutes per server |
+| Cloud machines in each location | Rent | DigitalOcean, Hetzner, Vultr, AWS Lightsail, Linode | Minutes per server |
+| DNS resolver on each server | Install | Unbound or dnsmasq | Minutes |
+| Firewall and NAT rules | Configure | nftables / iptables, ufw | An hour, then scripted |
+| Server agent | **Build** | Go + `wgctrl`, or Python / Node calling `wg` | Small: a few hundred lines |
+| Backend API | **Build** | Node.js (Fastify/Nest), Go, Python (FastAPI) | The main project |
+| Database | Install + design tables | PostgreSQL, Redis for rate limits | Small |
+| Sign-in | Use a service, or build | Firebase Auth, Supabase Auth, email OTP, Google sign-in | Small to medium |
+| Payments (optional) | Use a service | Google Play Billing, Razorpay, Stripe | Medium |
+| Admin dashboard (optional) | **Build** | Any web framework, or Retool / Appsmith | Medium |
+| Monitoring | Install | Prometheus + Grafana, Uptime Kuma | Small |
+| Varnika simple mode | **Build** | Flutter (this app) | Medium; the VPN engine is already done |
+
+### 17.6 What happens when someone taps Connect on "Mumbai"
+
+The private key never leaves the phone at any step.
+
+**Step 1: Sign in** (App → Backend → Database)
+```http
+POST /v1/auth/verify
+{ "email": "riya@example.com", "code": "482913" }
+
+← 200
+{ "accessToken": "eyJ…", "refreshToken": "…", "expiresIn": 900 }
+```
+Tokens are kept in Keystore-backed storage on the phone.
+
+**Step 2: Create keys and register this phone** (App → Backend → Database)
+```http
+# on the phone: keyPair = KeyPair()   ← private key stays here
+
+POST /v1/devices
+{ "name": "Riya's Pixel", "publicKey": "k9Qm…3Y=" }
+
+← 201 { "deviceId": "dev_7f2a" }
+```
+
+**Step 3: Load locations and find the fastest** (App → Backend)
+```http
+GET /v1/locations
+
+← 200
+[ { "code": "in-mum", "city": "Mumbai", "flag": "🇮🇳",
+    "ping": "https://mum.ping.yourvpn.com", "load": 0.31 },
+  { "code": "sg-sin", "city": "Singapore", … } ]
+```
+The app pings each location's test endpoint and suggests the fastest.
+
+**Step 4: User taps Connect on Mumbai** (App → Backend)
+```http
+POST /v1/connect
+Authorization: Bearer eyJ…
+{ "deviceId": "dev_7f2a", "location": "in-mum" }
+```
+
+**Step 5: Backend picks a server and a tunnel IP** (Backend → Database, one transaction)
+```sql
+SELECT * FROM servers
+ WHERE location = 'in-mum' AND status = 'active'
+ ORDER BY load_score LIMIT 1;                 -- → mum-2
+
+INSERT INTO peers (device_id, server_id, tunnel_ip)
+VALUES ('dev_7f2a', 'mum-2', '10.66.64.34');
+```
+It also checks the user's plan and device limit.
+
+**Step 6: Backend tells the Mumbai agent to accept the phone** (Backend → Agent → WireGuard)
+```http
+PUT https://mum-2.internal:8443/peers/k9Qm…3Y=
+{ "tunnelIp": "10.66.64.34/32" }
+
+# the agent runs:
+wg set wg0 peer k9Qm…3Y= allowed-ips 10.66.64.34/32
+
+← 204
+```
+This takes effect instantly, with no restart.
+
+**Step 7: Backend returns the connection details** (Backend → App)
+```json
+{
+  "endpoint": "mum-2.vpn.yourvpn.com:51820",
+  "serverPublicKey": "xTIB…p8Dg=",
+  "address": "10.66.64.34/32",
+  "dns": ["10.66.0.1"],
+  "allowedIps": ["0.0.0.0/0", "::/0"],
+  "keepalive": 25
+}
+```
+
+**Step 8: Varnika builds the config and connects** (App ⇄ WireGuard server)
+```ini
+# built in memory; the user never sees it
+[Interface]
+PrivateKey = (from the phone's Keystore)
+Address = 10.66.64.34/32
+DNS = 10.66.0.1
+
+[Peer]
+PublicKey = xTIB…p8Dg=
+Endpoint = mum-2.vpn.yourvpn.com:51820
+AllowedIPs = 0.0.0.0/0, ::/0
+PersistentKeepalive = 25
+```
+It then calls the same `TunnelManager.connect()` that Varnika uses today, and the handshake shows **Healthy**. From here, traffic flows directly between the phone and the Mumbai server; the backend isn't involved.
+
+### 17.7 The backend API
+
+**App → Backend** (public, HTTPS, versioned)
+
+| Method | Path | Purpose |
+|---|---|---|
+| `POST` | `/v1/auth/otp` | Send a sign-in code to an email or phone |
+| `POST` | `/v1/auth/verify` | Check the code; returns access and refresh tokens |
+| `GET` | `/v1/me` | Account, plan, device count, limits |
+| `GET` | `/v1/locations` | Countries and cities, with a ping target and load per location |
+| `POST` | `/v1/devices` | Register this phone's **public** key and name |
+| `POST` | `/v1/connect` | Pick a server in a location, register the key there, return connection details |
+| `POST` | `/v1/disconnect` | Optional: tell the backend the session ended |
+| `DELETE` | `/v1/devices/{id}` | Remove a device and its key from every server |
+| `PUT` | `/v1/devices/{id}/key` | Rotate the device's key |
+
+**Backend → Agent** (private network only)
+
+| Method | Path | Purpose |
+|---|---|---|
+| `PUT` | `/peers/{publicKey}` | Add or update a phone with its tunnel IP |
+| `DELETE` | `/peers/{publicKey}` | Remove a phone |
+| `GET` | `/peers` | List peers with their last handshake, for cleanup |
+| `PUT` | `/peers` | Replace the whole list (full sync after a restart) |
+| `GET` | `/health` | Up or down, peer count, CPU, bandwidth |
+
+Protect agents with **mutual TLS** or a per-server secret, and only accept calls from the backend's address, for example over a private network or a WireGuard management tunnel.
+
+### 17.8 The database: what it stores, and what it doesn't
+
+```text
+users      id, email/phone, plan, created_at, status
+devices    id, user_id, name, public_key, created_at, last_seen
+servers    id, location, hostname, public_ip, wg_public_key,
+           port, ip_pool, capacity, status (active/draining/down)
+peers      device_id, server_id, tunnel_ip, assigned_at
+locations  code (in-mum), country, city, flag
+```
+
+**Never stored:**
+- ❌ Device **private keys**. They are generated on the phone and never sent.
+- ❌ Websites visited, DNS lookups, or traffic contents.
+- ❌ Per-connection traffic logs, unless the law requires them (see [17.15](#1715-legal-and-compliance)).
+
+**Keep to a minimum:**
+- ⚠️ Users' real IP addresses. Rate-limit by IP in memory instead of storing it.
+- ⚠️ Connection timestamps. Keep only what billing, abuse handling or the law needs.
+
+### 17.9 Adding a VPN server, step by step
+
+1. **Rent a machine** in the city you want. 1 vCPU / 1 GB RAM is enough to start.
+2. **Run your setup script**: install WireGuard and Unbound, enable IP forwarding, add NAT and firewall rules, and open UDP 51820 (see [section 9](#9-setting-up-your-own-server-step-by-step) for the commands).
+3. **Generate the server's key pair** on the machine. The private key stays there.
+4. **Install the agent** as a systemd service, and give it its secret or certificate.
+5. **Register the server** with the backend: location, IP, public key, port, IP pool and capacity. Set its status to `active`.
+6. **Health checks start.** The backend polls `/health` every 30 seconds; if checks fail, the server is marked `down` and new connections go elsewhere.
+7. **To retire it**, set it to `draining`. No new users are sent there, existing users move on their next connect, then delete it.
+
+What the agent actually runs:
+```bash
+wg set wg0 peer <phone-public-key> allowed-ips 10.66.12.34/32   # add
+wg set wg0 peer <phone-public-key> remove                       # remove
+```
+
+### 17.10 Picking the best server
+
+- **"Fastest" location:** the app measures the round-trip time to each location's ping endpoint and suggests the lowest.
+- **Inside a location:** the backend picks the healthy, `active` server with the lowest load:
+  ```text
+  score = peers / capacity + 0.5 × bandwidth_used / bandwidth_limit
+  pick the lowest score; skip servers above 90%
+  ```
+- **Same phone, same server:** if a phone already has a peer on a healthy server in that location, reuse it. Reconnects are then instant and need no agent call.
+
+### 17.11 Handing out tunnel addresses
+
+Each server gets its own private address pool, so phones never collide:
+
+```text
+mum-1   10.66.0.0/18    → about 16,000 phones
+mum-2   10.66.64.0/18
+sgp-1   10.67.0.0/18
+fra-1   10.68.0.0/18
+server itself = .1 (also the DNS resolver)
+```
+
+The backend assigns the next free address in a database transaction and frees it when the peer is removed. Peers with no handshake for 30 days are cleaned up automatically.
+
+### 17.12 Security and privacy checklist
+
+- [ ] **Keys born on the phone.** Private keys are created on the device and never sent to the backend.
+- [ ] **HTTPS everywhere.** TLS for every API call; consider certificate pinning in the app.
+- [ ] **Short-lived tokens.** Access tokens expire in minutes; refresh tokens live in Keystore-backed storage and can be revoked.
+- [ ] **Agents are private.** Not reachable from the internet; mutual TLS or a per-server secret, from the backend's IP only.
+- [ ] **Instant revocation.** Deleting a device removes its key from every server within seconds.
+- [ ] **No traffic or DNS logs.** WireGuard doesn't log; turn logging off in Unbound and in the web server on VPN hosts.
+- [ ] **Rate and device limits.** Limit OTP attempts, connect calls and devices per account.
+- [ ] **Hardened servers.** SSH keys only, automatic security updates, and a firewall that allows only UDP 51820 plus the agent port from the backend.
+- [ ] **Least privilege.** The agent runs as its own user with only the network-admin capability it needs.
+- [ ] **Per-server keys.** Each VPN server has its own WireGuard key; if one machine is compromised, replace just that one.
+- [ ] **Honest privacy policy.** Publish exactly what you store and why, and keep it matching the code and the law.
+- [ ] **Kill switch guidance.** Keep the in-app guide so a dropped tunnel never leaks traffic.
+
+### 17.13 Scaling and reliability
+
+| Situation | What happens |
+|---|---|
+| One server is full | Add another server in the same location; the backend spreads new users by load score. |
+| A server crashes | Health checks mark it down within a minute. Varnika sees *Handshake: No reply*, calls `/v1/connect` again, and gets a healthy server. |
+| The agent restarts | It asks the backend for its full peer list (`PUT /peers`); the database is always the source of truth. |
+| The backend is down | People already connected **stay connected**, because WireGuard doesn't need the backend after setup. Only new connections wait. Run two backend instances behind a load balancer. |
+| Too many sign-up attempts | Rate-limit OTP and connect calls per account and per IP (Redis); limit devices per account (for example 5). |
+| Growing to many locations | Everything is scripted: a new location is a new machine, a setup script run, and one database row. |
+
+### 17.14 Rough monthly running costs
+
+| Scale | What's included | Approximate total |
+|---|---|---|
+| **Friends & family** (up to ~20 people, 1 location) | 1 VPN server ($5–6), backend + DB on the same machine or a free tier ($0–6), domain (~$1), self-hosted Uptime Kuma ($0) | **$6–13 / month** (≈ ₹500–1,100) |
+| **Small public launch** (hundreds of users, 3–4 locations) | 4 VPN servers ($24–60), backend ($10–20), managed PostgreSQL ($0–15), sign-in ($0–10), monitoring ($0–10), domain + email ($2–5) | **$40–120 / month** (≈ ₹3,500–10,000) |
+| **Growing service** (thousands of users, 10+ locations) | 20+ bandwidth-heavy servers ($300–1,200), two backend instances + load balancer ($40–120), managed PostgreSQL with backups ($30–100), Redis ($10–30), monitoring ($20–60), payment fees | **$400–1,500+ / month** (≈ ₹35,000–1,25,000+) |
+
+These are rough planning ranges, not quotes. Prices vary by provider and region, and bandwidth is usually the biggest cost as you grow.
+
+### 17.15 Legal and compliance
+
+- **Running it for yourself, family or your own team** is like running any private server.
+- **Offering it to the public as a VPN service in India** brings extra duties. In 2022, CERT-In directed VPN service providers to collect and keep subscriber details, such as names, contact details, the IPs assigned and the purpose of use, for five years, and to report certain security incidents within six hours. Several large VPN companies removed their servers from India in response. Rules can change, so **check the current CERT-In directions and get legal advice before launching publicly.**
+- **Elsewhere:** check local rules on VPNs, data protection (such as GDPR in the EU), and your hosting provider's acceptable-use policy.
+- **Always:** publish a privacy policy and terms of service. Google Play requires a declaration for apps that use `VpnService`.
+
+### 17.16 Rolling it out in phases
+
+1. **Phase 1: one server, no accounts.** One VPN server, a minimal backend with `/connect`, and Varnika's simple mode behind an invite code. This proves the whole loop works.
+2. **Phase 2: several locations.** Servers in 3 to 5 cities, the locations list, the fastest-location test, health checks and load-based picking.
+3. **Phase 3: accounts and devices.** Sign-in with OTP, a device list and limits, device removal, key rotation, and a privacy policy.
+4. **Phase 4: operations.** Monitoring and alerts, automated server setup, an admin dashboard, and abuse handling.
+5. **Phase 5 (optional): business.** Plans and payments (Google Play Billing, Razorpay), a store listing, and support.
+
+### 17.17 What changes in the Varnika app
+
+**Stays exactly the same**
+- ✅ The WireGuard engine, VPN permission flow, notification and Quick Settings tile
+- ✅ Live stats, handshake health, Insights, and the kill switch guide
+- ✅ Split tunneling (now applies to every location)
+- ✅ Key generation on the phone
+
+**New**
+- 🆕 Sign-in screen and secure token storage
+- 🆕 Location picker with flags, a fastest suggestion and ping times
+- 🆕 Calls `/v1/connect`, then builds the config internally and hands it to the existing `TunnelManager`
+- 🆕 Auto-reconnect to another server if the handshake fails
+- 🆕 Account screen: devices, plan, sign out
+- 🔀 Today's import, QR and `.conf` tools move to an **Advanced** section for power users
+
+### 17.18 Questions about the full system
+
+**Do I have to write VPN or encryption code?**
+No. WireGuard does all the encryption on both ends. You write the coordination: the backend that decides which phone may use which server, and the small agent that tells WireGuard.
+
+**Can my backend see what users browse?**
+No. Traffic goes directly between the phone and the VPN server. The backend only hands out connection details, which is why it can stay small and why a no-logs policy is easy to keep.
+
+**Which language should I use for the backend?**
+Whatever you know best: Node.js, Go and Python all work well. Go fits the agent nicely because of the `wgctrl` library. Dart on the server is also possible if you want one language everywhere.
+
+**How many users can one server handle?**
+WireGuard itself handles thousands of peers. The real limits are bandwidth and CPU. A small machine can usually serve a few hundred active users with normal browsing; start with a conservative capacity value, measure, and adjust.
+
+**What happens if a server goes down mid-session?**
+Varnika notices the handshake stopped (*Stale*, then *No reply*), calls `/v1/connect` again, and the backend sends it to a healthy server in the same location. With the kill switch on, nothing leaks in between.
+
+**Can users still import their own `.conf` files?**
+Yes. Keep today's import, QR and Create-from-scratch tools under **Advanced**. Power users keep full control, and everyone else gets the one-tap experience.
+
+**Do I need my own domain?**
+Strongly recommended. Use `api.yourvpn.com` for the backend and names like `mum-1.vpn.yourvpn.com` for servers, so you can change IPs without updating the app.
+
+**Are there open-source projects I could learn from or reuse?**
+Yes. Self-hosted WireGuard managers such as **wg-easy**, **Firezone**, **Netmaker** and **Defguard** solve parts of this, like peer management and dashboards. Studying them helps, but a consumer app with locations and accounts usually needs its own backend.
+
+**Do I need accounts at all?**
+Not for a private setup: Phase 1 can use invite codes. Public services need accounts for device limits, revocation, abuse handling and, in some countries such as India, legal record-keeping.
+
+**How long would this take to build?**
+For one developer: Phase 1 (one server, minimal backend, simple mode) is a few weeks; adding locations, accounts and operations takes a few months. Payments and a store launch add more.
+
+## 18. License
 
 Apache License 2.0. See [LICENSE](LICENSE).
 WireGuard is a registered trademark of Jason A. Donenfeld.
